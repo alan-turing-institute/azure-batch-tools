@@ -1,5 +1,5 @@
 # Azure virtual machine (VM) pool management
-  - `az-vm-pool.py`: Python script for creating, starting, stopping and deleting pools of Azure virtual machines (VMs).
+  - [az-vm-pool.py](../src/az-vm-pool.py): Python script for creating, starting, stopping and deleting pools of Azure virtual machines (VMs).
 
 ## Initial set up
 ### Manually set up prerequisite Azure services
