@@ -17,7 +17,12 @@ def main():
         help='Name of VM pool resource group.')
     parser.add_argument('queue_name',
         help='Name of service bus queue.')
-    parser.add_argument('command', choices=['create', 'status', 'empty', 'delete'])
+    parser.add_argument('command', choices=['create', 'status', 'fill', 'empty', 'fetch', 'delete'])
+    parser.add_argument('--input-path', '-i',
+        help='Path to input task file. Each line in the file will be passed to the queue as a single string.')
+    parser.add_argument('--output-path', '-o',
+        help='Path to output task file. The next task in the queue will written to this file as a single string on a single line.')
+
     args = parser.parse_args()
     # Add some default arguments that we won't clutter up the command line with
     args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
@@ -29,8 +34,12 @@ def main():
         create(args)
     elif(args.command == 'status'):
         status(args)
+    elif(args.command == 'fill'):
+        fill(args)
     elif(args.command == 'empty'):
         empty(args)
+    elif(args.command == 'fetch'):
+        fetch(args)
     elif(args.command == 'delete'):
         delete(args)
     else:
@@ -91,7 +100,7 @@ def queue_task(task, queue_name, args):
     if(not(queue_exists(queue_name, args))):
         return False
     else:
-        success = bus. send_queue_message(queue_name, Message(message))
+        success = bus. send_queue_message(queue_name, Message(task))
         return success
 
 def create_queue(queue_name, args):
@@ -110,7 +119,16 @@ def delete_queue(queue_name, args):
         success = bus.delete_queue(queue_name)
         return(success)
 
-def empty_queue(queue_name, args):
+def fill_queue(queue_name, task_file_path, args):
+    bus = get_servicebus(args)
+    if(not(queue_exists(queue_name, args))):
+        return(False)
+    else:
+        with open(task_file_path, 'r') as f:
+            tasks = f.readlines()
+        [queue_task(task, queue_name, args) for task in tasks]
+
+def empty_queue(queue_name, source_path, args):
     bus = get_servicebus(args)
     if(not(queue_exists(queue_name, args))):
         return(True)
@@ -159,6 +177,17 @@ def delete(args):
         else:
             print("Failed to delete queue '{:s}'.".format(queue_name))
 
+def fill(args):
+    bus = get_servicebus(args)
+    queue_name = args.queue_name
+    task_file_path = args.input_path
+    print("Filling queue '{:s}' with parameters from '{:s}'.".format(queue_name, task_file_path))
+    if(not(queue_exists(queue_name, args))):
+        print("Could not find queue '{:s}'. Skipping fill.".format(queue_name))
+    else:
+        fill_queue(queue_name, task_file_path, args)
+        print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))
+
 def empty(args):
     bus = get_servicebus(args)
     queue_name = args.queue_name
@@ -168,6 +197,22 @@ def empty(args):
     else:
         empty_queue(queue_name, args)
         print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))
+
+def fetch(args):
+    queue_name = args.queue_name
+    task_file_path = args.output_path
+    print("Getting next task from queue '{:s}' and saving to '{:s}'.".format(queue_name, task_file_path))
+    if(not(queue_exists(queue_name, args))):
+        print("Could not find queue '{:s}'. Skipping task fetch.".format(queue_name))
+    else:
+        task = fetch_task(queue_name, args)
+        if(task == None):
+            print("No tasks to fetch")
+        else:
+            with open(task_file_path, 'w+') as f:
+                f.write(task)
+        print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))
+
 
 if __name__ == "__main__":
     main()
