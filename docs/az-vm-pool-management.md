@@ -37,7 +37,7 @@ Some Azure resources need to be created via the [Azure management portal](https:
 
 ### Install Azure CLI and required packages on controller machine
 On the desktop or laptop you will be using to manage the VM pool, install the Azure command line client and some additional Azure python libraries for managing queues and storage on Azure.
-  - `pip install --user azure-cli azure-queue azure-storage`
+  - `pip install --user azure-cli tabulate azure-storage azure-servicebus`
 
 
 ## Usage
