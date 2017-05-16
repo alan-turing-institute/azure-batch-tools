@@ -17,7 +17,7 @@ def main():
         help='Name of VM pool resource group.')
     parser.add_argument('queue_name',
         help='Name of service bus queue.')
-    parser.add_argument('command', choices=['create', 'status', 'delete'])
+    parser.add_argument('command', choices=['create', 'status', 'empty', 'delete'])
     args = parser.parse_args()
     # Add some default arguments that we won't clutter up the command line with
     args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
@@ -26,11 +26,13 @@ def main():
     args.servicebus_sas_key_name = DEFAULT_SERVICEBUS_SAS_KEY_NAME
 
     if(args.command == 'create'):
-        create_queue(args)
+        create(args)
     elif(args.command == 'status'):
-        queue_status(args)
+        status(args)
+    elif(args.command == 'empty'):
+        empty(args)
     elif(args.command == 'delete'):
-        delete_queue(args)
+        delete(args)
     else:
         logger.warning("Unsupported command")
 
@@ -63,43 +65,109 @@ def get_servicebus(args):
     )
     return(bus)
 
-## ------------------
-## TOP-LEVEL COMMANDS
-## ------------------
-def create_queue(args):
+def queue_exists(queue_name, args):
     bus = get_servicebus(args)
     queue_name = args.queue_name
     try:
-        bus.get_queue(queue_name)
-        print("Queue '{:s}' already exists. Skipping create.".format(queue_name))
-        return
+        exists = bus.get_queue(queue_name)
+        # If no exception, then queue exists, but return actual return value
+        # from get_queue in case this changes in future
+        return exists
     except:
-        print("Creating queue '{:s}'".format(queue_name))
+        # Exception is thrown if queue does not exists
+        return False
+
+def fetch_task(queue_name, args):
+    bus = get_servicebus(args)
+    queue_name = args.queue_name
+    if(not(queue_exists(queue_name, args))):
+        return False
+    else:
+        task = bus.receive_queue_message(queue_name, peek_lock=False, timeout = 0).body
+        return task
+
+def queue_task(task, queue_name, args):
+    bus = get_servicebus(args)
+    if(not(queue_exists(queue_name, args))):
+        return False
+    else:
+        success = bus. send_queue_message(queue_name, Message(message))
+        return success
+
+def create_queue(queue_name, args):
+    bus = get_servicebus(args)
+    if(queue_exists(queue_name, args)):
+        return(True)
+    else:
         success = bus.create_queue(queue_name)
+        return(success)
+
+def delete_queue(queue_name, args):
+    bus = get_servicebus(args)
+    if(not(queue_exists(queue_name, args))):
+        return(True)
+    else:
+        success = bus.delete_queue(queue_name)
+        return(success)
+
+def empty_queue(queue_name, args):
+    bus = get_servicebus(args)
+    if(not(queue_exists(queue_name, args))):
+        return(True)
+    else:
+        while(has_tasks(queue_name, args)):
+            fetch_task(queue_name, args)
+
+def queue_length(queue_name, args):
+    bus = get_servicebus(args)
+    return bus.get_queue(queue_name=queue_name).message_count
+
+def has_tasks(queue_name, args):
+    num_msgs = queue_length(queue_name, args)
+    return(num_msgs > 0)
+
+## ------------------
+## TOP-LEVEL COMMANDS
+## ------------------
+def create(args):
+    queue_name = args.queue_name
+    if(queue_exists(queue_name, args)):
+        print("Queue '{:s}' already exists. Skipping create.".format(queue_name))
+    else:
+        success = create_queue(queue_name, args)
         if(success):
             print("Queue '{:s}' successfully created.".format(queue_name))
         else:
             print("Failed to create queue '{:s}'.".format(queue_name))
 
-def queue_status(args):
-    bus = get_servicebus(args)
+def status(args):
     queue_name = args.queue_name
-    queue_length = bus.get_queue(queue_name=queue_name).message_count
-    print("{:d} messages in queue '{:s}'".format(queue_length, queue_name))
+    if(not(queue_exists(queue_name, args))):
+        print("Could not find queue '{:s}'. Skipping status check.".format(queue_name))
+    num_tasks = queue_length(queue_name, args)
+    print("{:d} messages in queue '{:s}'".format(num_tasks, queue_name))
 
-def delete_queue(args):
+def delete(args):
     bus = get_servicebus(args)
     queue_name = args.queue_name
-    try:
-        bus.get_queue(queue_name)
-    except:
+    if(not(queue_exists(queue_name, args))):
         print("Could not find queue '{:s}'. Skipping delete.".format(queue_name))
-        return
-    success = bus.delete_queue(queue_name)
-    if(success):
-        print("Queue '{:s}' successfully deleted.".format(queue_name))
     else:
-        print("Failed to delete queue '{:s}'.".format(queue_name))
+        success = bus.delete_queue(queue_name)
+        if(success):
+            print("Queue '{:s}' successfully deleted.".format(queue_name))
+        else:
+            print("Failed to delete queue '{:s}'.".format(queue_name))
+
+def empty(args):
+    bus = get_servicebus(args)
+    queue_name = args.queue_name
+    print("Emptying {:d} messages from queue '{:s}'.".format(queue_length(queue_name, args), queue_name))
+    if(not(queue_exists(queue_name, args))):
+        print("Could not find queue '{:s}'. Skipping fill.".format(queue_name))
+    else:
+        empty_queue(queue_name, args)
+        print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))
 
 if __name__ == "__main__":
     main()
