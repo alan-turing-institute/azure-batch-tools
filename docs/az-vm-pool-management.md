@@ -22,7 +22,7 @@ Some Azure resources need to be created via the [Azure management portal](https:
     - Set `Resource group` to the one you created above
     - Set `Location` to the location of the resource group
   - **Virtual network:**
-    - From the sidebar menu, navigate to 'New (+)' -> Networking -> Virtual network
+    - From the sidebar menu, navigate to 'New (+)' -> Networking -> Virtual network and press the 'create' button
     - Set `Name` to the name of the Resource Group you created above
     - Set `Subnet name` to the name of the Resource Group you created above
     - Set `Resource group` to the one you created above
