@@ -13,7 +13,7 @@ Some Azure resources need to be created via the [Azure management portal](https:
     - Select a location (we suggest `westeurope` as a good copmpromise between feature availability and geographic proximity)
   - **Storage account:**
     - From the sidebar menu, navigate to 'Storage accounts' -> 'Add'
-    - Enter a unique name (suggest the name of the resource group)
+    - Set `Name` to the name of the Resource Group
     - Set `Deployment model` to `Resource manager`
     - Set `Performance` to `Standard`
     - Set `Replication` to `Locally-redundant storage (LRS)`
@@ -22,9 +22,14 @@ Some Azure resources need to be created via the [Azure management portal](https:
     - Set `Resource group` to the one you created above
     - Set `Location` to the location of the resource group
   - **Virtual network:**
+    - From the sidebar menu, navigate to 'New (+)' -> Networking -> Virtual network
+    - Set `Name` to the name of the Resource Group you created above
+    - Set `Subnet name` to the name of the Resource Group you created above
+    - Set `Resource group` to the one you created above
+    - Set `Location` to the location of the resource group    
   - **Azure Service Bus:**
     - From the sidebar menu, navigate to 'New (+)' -> Enterprise Integration -> Service bus_service
-    - Set a namespace `name` (suggest the name of the resource group)
+    - Set namespace `Name` to the name of the Resource Group you created above
     - Set `Pricing tier` to `Basic`
     - Set `Subscription` to the one used for the resource group
     - Set `Resource group` to the one you created above
