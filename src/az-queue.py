@@ -164,7 +164,7 @@ def empty(args):
     queue_name = args.queue_name
     print("Emptying {:d} messages from queue '{:s}'.".format(queue_length(queue_name, args), queue_name))
     if(not(queue_exists(queue_name, args))):
-        print("Could not find queue '{:s}'. Skipping fill.".format(queue_name))
+        print("Could not find queue '{:s}'. Skipping empty.".format(queue_name))
     else:
         empty_queue(queue_name, args)
         print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))
