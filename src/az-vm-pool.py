@@ -33,7 +33,8 @@ AZURE_PASSWORD_CHARSET = string.ascii_lowercase + string.ascii_uppercase + strin
 DEFAULT_SSH_KEY_DIRECTORY = 'private-pool-ssh-keys'
 DEFAULT_SAS_DIRECTORY = 'private-pool-sas-tokens'
 DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:16.04.201703300'
-DEFAULT_STORAGE_CONTAINER_NAME = "vhds"
+DEFAULT_OS_CONTAINER_NAME = "vhds"
+DEFAULT_DATA_CONTAINER_NAME = "data"
 DEFAULT_SAS_EXPIRY_DAYS = 14
 
 # Set up some exit statuses
@@ -71,6 +72,8 @@ def main():
     args.ssh_key_directory = DEFAULT_SSH_KEY_DIRECTORY
     args.sas_directory = DEFAULT_SAS_DIRECTORY
     args.vm_image = DEFAULT_VM_IMAGE
+    args.os_container_name = DEFAULT_OS_CONTAINER_NAME
+    args.data_container_name = DEFAULT_DATA_CONTAINER_NAME
 
     azlogging.configure_logging("")
 
@@ -341,10 +344,10 @@ def vm_os_disk_name(vm_name, args):
     return "{0}_os_disk".format(vm_name)
 
 def pool_os_container_name(args, with_extension = False):
-    return "{:s}vhds".format(args.resource_group)
+    return "{:s}".format(args.os_container_name)
 
 def pool_data_container_name(args, with_extension = False):
-    return "{:s}data".format(args.resource_group)
+    return "{:s}".format(args.data_container_name)
 
 def create_pool_data_container(args):
     connection_string = pool_storage_account_connection_string(args)
