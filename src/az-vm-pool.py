@@ -35,7 +35,9 @@ DEFAULT_SAS_DIRECTORY = 'private-pool-sas-tokens'
 DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:16.04.201703300'
 DEFAULT_OS_CONTAINER_NAME = "vhds"
 DEFAULT_DATA_CONTAINER_NAME = "data"
+DEFAULT_CONTAINER_SAS_PREFIX = "sas_storage_container"
 DEFAULT_SAS_EXPIRY_DAYS = 14
+DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
 
 # Set up some exit statuses
 CLEAN_EXIT = 0
@@ -47,7 +49,7 @@ def main():
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
         help='Name of VM pool resource group.')
-    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'start-all', 'stop-all', 'new-sas'])
+    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'start-all', 'stop-all', 'refresh-sas'])
     parser.add_argument('--num-vms', '-n', type=int,
         help='Number of VMs to create in pool.')
     parser.add_argument('--vm-size', '-s',
@@ -74,6 +76,8 @@ def main():
     args.vm_image = DEFAULT_VM_IMAGE
     args.os_container_name = DEFAULT_OS_CONTAINER_NAME
     args.data_container_name = DEFAULT_DATA_CONTAINER_NAME
+    args.container_sas_prefix = DEFAULT_CONTAINER_SAS_PREFIX
+    args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
 
     azlogging.configure_logging("")
 
@@ -120,8 +124,8 @@ def main():
         shutdown_all(args)
     elif(args.command == 'delete-pool'):
         delete_pool(args)
-    elif(args.command == 'new-sas'):
-        pool_data_container_sas(args)
+    elif(args.command == 'refresh-sas'):
+        refresh_sas(args)
     else:
         logger.warning("Unsupported command")
 
@@ -235,10 +239,10 @@ def next_vm_name(vms, args):
     return name_from_number(len(vm_numbers) + 1, args)
 
 def ssh_private_key_filename(args):
-    return "azure_vm_pool_{0}".format(args.resource_group)
+    return "{:s}_{:s}".format(args.pool_file_prefix, args.resource_group)
 
 def ssh_public_key_filename(args):
-    return "{0}.pub".format(ssh_private_key_filename(args))
+    return "{:s}.pub".format(ssh_private_key_filename(args))
 
 def ssh_private_key_path(args):
     return os.path.join(args.ssh_key_directory, ssh_private_key_filename(args))
@@ -369,8 +373,8 @@ def delete_pool_os_container(args):
     options = [container_name_opt, connection_string_opt]
     result = APPLICATION.execute(commands + options).result
 
-def sas_filename(container_name, args):
-    return "sas_{0}.txt".format(container_name)
+def container_sas_filename(container_name, args):
+    return "{:s}_{:s}_{:s}_{:s}.txt".format(args.pool_file_prefix, args.resource_group, args.container_sas_prefix, container_name)
 
 def pool_storage_account_connection_string(args):
     storage_account_name = args.resource_group
@@ -378,6 +382,26 @@ def pool_storage_account_connection_string(args):
     commands = ["storage", "account", "show-connection-string"]
     options = [account_name_opt]
     return vm_pool_command(commands, options, args)["connectionString"]
+
+def pool_data_container_sas(args):
+    container_name = pool_data_container_name(args)
+    connection_string = pool_storage_account_connection_string(args)
+    name_opt = "--name={0}".format(container_name)
+    connection_string_opt = "--connection-string={0}".format(connection_string)
+    permissions_opt = "--permissions=lrw"
+    https_opt = "--https-only"
+    expiry_datetime = datetime.utcnow() + timedelta(days = args.sas_expiry_days)
+    expiry_opt = "--expiry={:%Y-%m-%dT%H:%MZ}".format(expiry_datetime)
+    commands = ["storage", "container", "generate-sas"]
+    options = [name_opt, connection_string_opt, permissions_opt, https_opt, expiry_opt]
+    result = APPLICATION.execute(commands + options).result
+    if(not os.path.exists(args.sas_directory)):
+        os.makedirs(args.sas_directory)
+    filepath = os.path.join(args.sas_directory, container_sas_filename(container_name, args))
+    with open(filepath, 'w+') as f:
+        f.write(result)
+        logger.warning("New SAS token for pool data container '{:s}' written to '{:s}'. SAS token exires on {:%Y-%m-%dT%H:%MZ}.".format(container_name, filepath, expiry_datetime))
+    return result
 
 ## ------------------
 ## TOP-LEVEL COMMANDS
@@ -544,25 +568,8 @@ def delete_vm(vm, args, force):
     logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' deleted in {:s}".format(datetime.now(), vm_name, timedelta_string(datetime.now() - start_time)))
     return(result)
 
-def pool_data_container_sas(args):
-    container_name = pool_data_container_name(args)
-    connection_string = pool_storage_account_connection_string(args)
-    name_opt = "--name={0}".format(container_name)
-    connection_string_opt = "--connection-string={0}".format(connection_string)
-    permissions_opt = "--permissions=lrw"
-    https_opt = "--https-only"
-    expiry_datetime = datetime.utcnow() + timedelta(days = args.sas_expiry_days)
-    expiry_opt = "--expiry={:%Y-%m-%dT%H:%MZ}".format(expiry_datetime)
-    commands = ["storage", "container", "generate-sas"]
-    options = [name_opt, connection_string_opt, permissions_opt, https_opt, expiry_opt]
-    result = APPLICATION.execute(commands + options).result
-    if(not os.path.exists(args.sas_directory)):
-        os.makedirs(args.sas_directory)
-    filepath = os.path.join(args.sas_directory, sas_filename(container_name, args))
-    with open(filepath, 'w+') as f:
-        f.write(result)
-        logger.warning("New SAS token for pool data container '{:s}' written to '{:s}'. SAS token exires on {:%Y-%m-%dT%H:%MZ}.".format(container_name, filepath, expiry_datetime))
-    return result
+def refresh_sas(args):
+    pool_data_container_sas(args)
 
 if __name__ == "__main__":
     main()
