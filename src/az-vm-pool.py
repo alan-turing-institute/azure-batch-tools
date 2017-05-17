@@ -39,6 +39,8 @@ DEFAULT_DATA_CONTAINER_NAME = "data"
 DEFAULT_CONTAINER_SAS_PREFIX = "sas_storage_container"
 DEFAULT_SAS_EXPIRY_DAYS = 14
 DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
+SETUP_DIRECTORY = "setup"
+SETUP_SCRIPT = "run.sh"
 
 # Set up some exit statuses
 CLEAN_EXIT = 0
@@ -50,7 +52,7 @@ def main():
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
         help='Name of VM pool resource group.')
-    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'start-all', 'stop-all', 'refresh-sas'])
+    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'refresh-sas'])
     parser.add_argument('--num-vms', '-n', type=int,
         help='Number of VMs to create in pool.')
     parser.add_argument('--vm-size', '-s',
@@ -70,7 +72,12 @@ def main():
     parser.add_argument("--sas-expiry-days", type=int,
         default = DEFAULT_SAS_EXPIRY_DAYS,
         help="Number of days the generated Shared Access Signature (SAS) access code for the VM pool storage container should be valid for.")
+    parser.add_argument("--pool-directory", "-d",
+        default = ".",
+        help="Directory containing 'setup', 'deploy' and 'task' directories for the pool.")
+
     args = parser.parse_args()
+
     # Add some default arguments that we won't clutter up the command line with
     args.ssh_key_directory = DEFAULT_SSH_KEY_DIRECTORY
     args.sas_directory = DEFAULT_SAS_DIRECTORY
@@ -79,6 +86,8 @@ def main():
     args.data_container_name = DEFAULT_DATA_CONTAINER_NAME
     args.container_sas_prefix = DEFAULT_CONTAINER_SAS_PREFIX
     args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
+    args.setup_directory = SETUP_DIRECTORY
+    args.setup_script = SETUP_SCRIPT
 
     azlogging.configure_logging("")
 
@@ -119,6 +128,8 @@ def main():
         list_sizes(args)
     elif(args.command == 'create-pool'):
         create_pool(args)
+    elif(args.command == 'setup-pool'):
+        setup_pool(args)
     elif(args.command == 'start-all'):
         start_all(args)
     elif(args.command == 'stop-all'):
@@ -404,6 +415,40 @@ def pool_data_container_sas(args):
         logger.warning("New SAS token for pool data container '{:s}' written to '{:s}'. SAS token exires on {:%Y-%m-%dT%H:%MZ}.".format(container_name, filepath, expiry_datetime))
     return result
 
+def vm_url(vm, args):
+    return("{:s}.{:s}.cloudapp.azure.com".format(vm["name"], vm["location"]))
+
+def vm_ssh_run_script(vm, script, args, detach=False):
+    ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
+    host_opt = "{:s}".format(vm_url(vm, args))
+    if(detach):
+        script_opt = "screen -d -m {:s}".format(script)
+    else:
+        script_opt = script
+    command = ["ssh", host_opt, "-i", ssh_key_opt, script_opt]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    return(result == 0)
+
+def local_run_script(script, args):
+    command = [script]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    return(result == 0)
+
+def vm_make_exec(vm, script, args):
+    exec_script = "chmod +x {:s}".format(script)
+    return(vm_ssh_run_script(vm, exec_script, args))
+
+def vm_upload_dir(vm, source_dir, dest_dir, args):
+    ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
+    source_opt = source_dir
+    dest_opt = "{:s}:{:s}".format(vm_url(vm, args) ,dest_dir)
+    command = ["scp", "-i", ssh_key_opt, "-r", source_opt, dest_opt]
+    # First remove directory if it exists already
+    remove_dir_script = "rm -r {:s}".format(dest_dir)
+    vm_ssh_run_script(vm, remove_dir_script, args)
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    return(result == 0)
+
 ## ------------------
 ## TOP-LEVEL COMMANDS
 ## ------------------
@@ -475,6 +520,39 @@ def create_vm(vm_number, args):
     result = vm_pool_command(commands, options, args)
     logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' created in {:s}".format(datetime.now(), vm_name, timedelta_string(datetime.now() - start_time)))
     return(result)
+
+def setup_pool(args):
+    vms = get_vms(args)
+    num_vms = len(vms)
+    if(num_vms == 0):
+        print_vm_table(vms, args)
+        logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
+    else:
+        start_time = datetime.now()
+        logger.warning("{:%Hh%Mm%Ss}: Setting up pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        result = [setup_vm(vm, args) for vm in vms]
+        logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' set up in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+
+def setup_vm(vm, args):
+    vm_name = vm["name"]
+    source_dir = os.path.join(args.pool_directory, args.setup_directory)
+    dest_dir = args.setup_directory
+    setup_script = os.path.join(dest_dir, args.setup_script)
+    # Copy setup directory to VM
+    logger.warning("Copying setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(source_dir, dest_dir, vm_name))
+    success = vm_upload_dir(vm, source_dir, dest_dir, args)
+    if(success):
+        logger.warning("Successfully copied setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(source_dir, dest_dir, vm_name))
+    else:
+        logger.warning("Failed to copy setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(source_dir, dest_dir, vm_name))
+    # Make setup script executable
+    success = vm_make_exec(vm, setup_script, args)
+    # Run setup script
+    success = vm_ssh_run_script(vm, setup_script, args)
+    if(success):
+        logger.warning("Successfully ran setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+    else:
+        logger.warning("Failed to run setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
 
 def show_pool(args):
     vms = get_vms(args)
