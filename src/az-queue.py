@@ -5,11 +5,10 @@ import os
 
 from azure.servicebus import ServiceBusService, Message, Queue
 
-DEFAULT_SAS_DIRECTORY = 'private-pool-sas-tokens'
+DEFAULT_SAS_DIRECTORY = 'secrets'
 DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
 DEFAULT_SERVICEBUS_SAS_KEY_NAME = "RootManageSharedAccessKey"
 DEFAULT_SERVICEBUS_SAS_PREFIX = "sas_servicebus"
-DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
 
 def main():
     # Parse command line arguments
@@ -23,11 +22,12 @@ def main():
         help='Path to input task file. Each line in the file will be passed to the queue as a single string.')
     parser.add_argument('--output-path', '-o',
         help='Path to output task file. The next task in the queue will written to this file as a single string on a single line.')
+    parser.add_argument('--sas-path', '-t',
+        help='Path to Shared Access Signature (SAS) token with full access to the queue')
 
     args = parser.parse_args()
     # Add some default arguments that we won't clutter up the command line with
     args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
-    args.sas_directory = DEFAULT_SAS_DIRECTORY
     args.servicebus_sas_prefix = DEFAULT_SERVICEBUS_SAS_PREFIX
     args.servicebus_sas_key_name = DEFAULT_SERVICEBUS_SAS_KEY_NAME
 
@@ -59,7 +59,10 @@ def servicebus_queue_sas_filename(queue_name, args):
     return "{:s}_{:s}_{:s}_queue_{:s}.txt".format(args.pool_file_prefix, args.resource_group, args.servicebus_sas_prefix, queue_name)
 
 def get_servicebus_management_sas(args):
-    filepath = os.path.join(args.sas_directory, servicebus_management_sas_filename(args))
+    if(args.sas_path != None):
+        filepath = args.sas_path
+    else:
+        filepath = os.path.join(DEFAULT_SAS_DIRECTORY, servicebus_management_sas_filename(args))
     with open(filepath, 'r') as f:
         sas = f.readline()
     return sas
