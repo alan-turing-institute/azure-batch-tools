@@ -32,7 +32,7 @@ AZURE_PASSWORD_CHARSET = string.ascii_lowercase + string.ascii_uppercase + strin
 
 # Some defaults
 DEFAULT_SSH_KEY_DIRECTORY = 'private-pool-ssh-keys'
-DEFAULT_SAS_DIRECTORY = 'private-pool-sas-tokens'
+DEFAULT_SAS_DIRECTORY = 'secrets'
 DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:16.04.201703300'
 DEFAULT_OS_CONTAINER_NAME = "vhds"
 DEFAULT_DATA_CONTAINER_NAME = "data"
