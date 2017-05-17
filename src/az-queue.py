@@ -132,7 +132,7 @@ def fill_queue(queue_name, task_file_path, args):
             tasks = f.readlines()
         [queue_task(task, queue_name, args) for task in tasks]
 
-def empty_queue(queue_name, source_path, args):
+def empty_queue(queue_name, args):
     bus = get_servicebus(args)
     if(not(queue_exists(queue_name, args))):
         return(True)
