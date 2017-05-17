@@ -351,7 +351,7 @@ def vm_os_disk_name(vm_name, args):
 def pool_os_container_name(args, with_extension = False):
     return "{:s}".format(args.os_container_name)
 
-def pool_data_container_name(args, with_extension = False):
+def pool_data_container_name(args):
     return "{:s}".format(args.data_container_name)
 
 def create_pool_data_container(args):
