@@ -44,7 +44,7 @@ def main():
     elif(args.command == 'delete'):
         delete(args)
     else:
-        logger.warning("Unsupported command")
+        print("Unsupported command")
 
 ## ----------------
 ## HELPER FUNCTIONS
