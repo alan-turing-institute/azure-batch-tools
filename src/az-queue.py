@@ -34,8 +34,8 @@ def main():
     # Enforce conditional required arguments
     if(args.command in ['fill'] and args.input_path == None):
         parser.error("Input path required for command '{:s}'. Please provide using '-i' or '--input-path'".format(args.command))
-    if(args.command in ['fetch'] and args.input_path == None):
-        parser.error("Input path required for command '{:s}'. Please provide using '-o' or '--output-path'".format(args.command))
+    if(args.command in ['fetch'] and args.output_path == None):
+        parser.error("Output path required for command '{:s}'. Please provide using '-o' or '--output-path'".format(args.command))
 
     if(args.command == 'create'):
         create(args)
