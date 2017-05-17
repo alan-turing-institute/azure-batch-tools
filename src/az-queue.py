@@ -31,6 +31,12 @@ def main():
     args.servicebus_sas_prefix = DEFAULT_SERVICEBUS_SAS_PREFIX
     args.servicebus_sas_key_name = DEFAULT_SERVICEBUS_SAS_KEY_NAME
 
+    # Enforce conditional required arguments
+    if(args.command in ['fill'] and args.input_path == None):
+        parser.error("Input path required for command '{:s}'. Please provide using '-i' or '--input-path'".format(args.command))
+    if(args.command in ['fetch'] and args.input_path == None):
+        parser.error("Input path required for command '{:s}'. Please provide using '-o' or '--output-path'".format(args.command))
+
     if(args.command == 'create'):
         create(args)
     elif(args.command == 'status'):
