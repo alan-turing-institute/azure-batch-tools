@@ -418,7 +418,7 @@ def pool_data_container_sas(args):
 def vm_url(vm, args):
     return("{:s}.{:s}.cloudapp.azure.com".format(vm["name"], vm["location"]))
 
-def vm_ssh_run_script(vm, script, args, detach=False):
+def vm_run_script(vm, script, args, detach=False):
     ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
     host_opt = "{:s}".format(vm_url(vm, args))
     if(detach):
@@ -434,9 +434,13 @@ def local_run_script(script, args):
     result = subprocess.call(command, stderr=subprocess.STDOUT)
     return(result == 0)
 
+def local_make_exec(script, args):
+    exec_script = "chmod +x {:s}".format(script)
+    return(local_run_script(exec_script, args))
+
 def vm_make_exec(vm, script, args):
     exec_script = "chmod +x {:s}".format(script)
-    return(vm_ssh_run_script(vm, exec_script, args))
+    return(vm_run_script(vm, exec_script, args))
 
 def vm_upload_dir(vm, source_dir, dest_dir, args):
     ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
@@ -445,7 +449,7 @@ def vm_upload_dir(vm, source_dir, dest_dir, args):
     command = ["scp", "-i", ssh_key_opt, "-r", source_opt, dest_opt]
     # First remove directory if it exists already
     remove_dir_script = "rm -r {:s}".format(dest_dir)
-    vm_ssh_run_script(vm, remove_dir_script, args)
+    vm_run_script(vm, remove_dir_script, args)
     result = subprocess.call(command, stderr=subprocess.STDOUT)
     return(result == 0)
 
@@ -548,7 +552,7 @@ def setup_vm(vm, args):
     # Make setup script executable
     success = vm_make_exec(vm, setup_script, args)
     # Run setup script
-    success = vm_ssh_run_script(vm, setup_script, args)
+    success = vm_run_script(vm, setup_script, args)
     if(success):
         logger.warning("Successfully ran setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
     else:
