@@ -389,7 +389,7 @@ def pool_data_container_sas(args):
     connection_string = pool_storage_account_connection_string(args)
     name_opt = "--name={0}".format(container_name)
     connection_string_opt = "--connection-string={0}".format(connection_string)
-    permissions_opt = "--permissions=lrw"
+    permissions_opt = "--permissions=lrwd"
     https_opt = "--https-only"
     expiry_datetime = datetime.utcnow() + timedelta(days = args.sas_expiry_days)
     expiry_opt = "--expiry={:%Y-%m-%dT%H:%MZ}".format(expiry_datetime)
