@@ -40,7 +40,11 @@ DEFAULT_CONTAINER_SAS_PREFIX = "sas_storage_container"
 DEFAULT_SAS_EXPIRY_DAYS = 14
 DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
 SETUP_DIRECTORY = "setup"
+DEPLOY_DIRECTORY = "deploy"
+TASK_DIRECTORY = "task"
 SETUP_SCRIPT = "run.sh"
+DEPLOY_SCRIPT = "run.sh"
+TASK_SCRIPT = "run.sh"
 
 # Set up some exit statuses
 CLEAN_EXIT = 0
@@ -52,7 +56,7 @@ def main():
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
         help='Name of VM pool resource group.')
-    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'refresh-sas'])
+    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'refresh-sas'])
     parser.add_argument('--num-vms', '-n', type=int,
         help='Number of VMs to create in pool.')
     parser.add_argument('--vm-size', '-s',
@@ -87,7 +91,11 @@ def main():
     args.container_sas_prefix = DEFAULT_CONTAINER_SAS_PREFIX
     args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
     args.setup_directory = SETUP_DIRECTORY
+    args.deploy_directory = DEPLOY_DIRECTORY
+    args.task_directory = TASK_DIRECTORY
     args.setup_script = SETUP_SCRIPT
+    args.deploy_script = DEPLOY_SCRIPT
+    args.task_script = TASK_SCRIPT
 
     azlogging.configure_logging("")
 
@@ -134,6 +142,8 @@ def main():
         start_all(args)
     elif(args.command == 'stop-all'):
         shutdown_all(args)
+    elif(args.command == 'deploy-task'):
+        deploy_task(args)
     elif(args.command == 'delete-pool'):
         delete_pool(args)
     elif(args.command == 'refresh-sas'):
@@ -435,8 +445,9 @@ def local_run_script(script, args):
     return(result == 0)
 
 def local_make_exec(script, args):
-    exec_script = "chmod +x {:s}".format(script)
-    return(local_run_script(exec_script, args))
+    command = ["chmod", "+x", script]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    return(result == 0)
 
 def vm_make_exec(vm, script, args):
     exec_script = "chmod +x {:s}".format(script)
@@ -557,6 +568,42 @@ def setup_vm(vm, args):
         logger.warning("Successfully ran setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
     else:
         logger.warning("Failed to run setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+
+def deploy_task(args):
+    vms = get_vms(args)
+    num_vms = len(vms)
+    if(num_vms == 0):
+        print_vm_table(vms, args)
+        logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
+    else:
+        start_time = datetime.now()
+        # Setup tasks by running deployment script
+        logger.warning("{:%Hh%Mm%Ss}: Running deployment script to set up tasks for VM pool for Resource Group '{:s}'.".format(datetime.now(), args.resource_group))
+        # Deploy task to VMs
+        logger.warning("{:%Hh%Mm%Ss}: Deploying task to pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        result = [deploy_task_vm(vm, args) for vm in vms]
+        logger.warning("{:%Hh%Mm%Ss}: Task deployed to pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+
+def deploy_task_vm(vm, args):
+    vm_name = vm["name"]
+    task_source_dir = os.path.join(args.pool_directory, args.task_directory)
+    task_dest_dir = args.task_directory
+    task_script = os.path.join(task_dest_dir, args.task_script)
+    # Copy task directory to VM
+    logger.warning("Copying task directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(task_source_dir, task_dest_dir, vm_name))
+    success = vm_upload_dir(vm, task_source_dir, task_dest_dir, args)
+    if(success):
+        logger.warning("Successfully copied setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(task_source_dir, task_dest_dir, vm_name))
+    else:
+        logger.warning("Failed to copy setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(task_source_dir, task_dest_dir, vm_name))
+    # Make task script executable
+    success = vm_make_exec(vm, task_script, args)
+    # Run task script
+    success = vm_run_script(vm, task_script, args, detach=True)
+    if(success):
+        logger.warning("Successfully started script '{:s}' on VM '{:s}'.".format(task_script, vm_name))
+    else:
+        logger.warning("Failed to start script '{:s}' on VM '{:s}'.".format(task_script, vm_name))
 
 def show_pool(args):
     vms = get_vms(args)
