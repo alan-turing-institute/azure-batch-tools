@@ -210,8 +210,8 @@ def empty(args):
 
 def fetch(args):
     queue_name = args.queue_name
-    task_file_path = args.output_path
-    print("Getting next task from queue '{:s}' and saving to '{:s}'.".format(queue_name, task_file_path))
+    output_path = args.output_path
+    print("Getting next task from queue '{:s}' and saving to '{:s}'.".format(queue_name, output_path))
     if(not(queue_exists(queue_name, args))):
         print("Could not find queue '{:s}'. Skipping task fetch.".format(queue_name))
     else:
@@ -219,7 +219,10 @@ def fetch(args):
         if(task == None):
             print("No tasks to fetch")
         else:
-            with open(task_file_path, 'w+') as f:
+            output_dir = os.path.dirname(output_path)
+            if(not os.path.exists(output_dir)):
+                os.makedirs(output_dir)
+            with open(output_path, 'w+') as f:
                 f.write(task)
         print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))
 
