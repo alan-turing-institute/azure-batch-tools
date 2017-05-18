@@ -577,8 +577,6 @@ def deploy_task(args):
         logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
     else:
         start_time = datetime.now()
-        # Setup tasks by running deployment script
-        logger.warning("{:%Hh%Mm%Ss}: Running deployment script to set up tasks for VM pool for Resource Group '{:s}'.".format(datetime.now(), args.resource_group))
         # Deploy task to VMs
         logger.warning("{:%Hh%Mm%Ss}: Deploying task to pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
         result = [deploy_task_vm(vm, args) for vm in vms]
