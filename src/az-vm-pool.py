@@ -544,9 +544,9 @@ def setup_pool(args):
         logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
     else:
         start_time = datetime.now()
-        logger.warning("{:%Hh%Mm%Ss}: Setting up pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        logger.warning("{:%Hh%Mm%Ss}: Initiating setup for pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
         result = [setup_vm(vm, args) for vm in vms]
-        logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' set up in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+        logger.warning("{:%Hh%Mm%Ss}: Setup initiated for pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
 
 def setup_vm(vm, args):
     vm_name = vm["name"]
@@ -563,11 +563,11 @@ def setup_vm(vm, args):
     # Make setup script executable
     success = vm_make_exec(vm, setup_script, args)
     # Run setup script
-    success = vm_run_script(vm, setup_script, args)
+    success = vm_run_script(vm, setup_script, args, detach=True)
     if(success):
-        logger.warning("Successfully ran setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+        logger.warning("Successfully initiated setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
     else:
-        logger.warning("Failed to run setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+        logger.warning("Failed to initiate setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
 
 def deploy_task(args):
     vms = get_vms(args)
