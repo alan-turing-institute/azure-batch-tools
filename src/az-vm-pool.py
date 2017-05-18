@@ -56,7 +56,7 @@ def main():
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
         help='Name of VM pool resource group.')
-    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'refresh-sas'])
+    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'start-task', 'kill-task', 'refresh-sas'])
     parser.add_argument('--num-vms', '-n', type=int,
         help='Number of VMs to create in pool.')
     parser.add_argument('--vm-size', '-s',
@@ -143,6 +143,10 @@ def main():
         shutdown_all(args)
     elif(args.command == 'deploy-task'):
         deploy_task(args)
+    elif(args.command == 'start-task'):
+        start_task(args)
+    elif(args.command == 'kill-task'):
+        kill_task(args)
     elif(args.command == 'delete-pool'):
         delete_pool(args)
     elif(args.command == 'refresh-sas'):
@@ -578,10 +582,12 @@ def deploy_task(args):
         logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
     else:
         start_time = datetime.now()
-        # Deploy task to VMs
+        # Kill any running task
+        kill_task(args)
+        # Copy task to VMs
         logger.warning("{:%Hh%Mm%Ss}: Deploying task to pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
         result = [deploy_task_vm(vm, args) for vm in vms]
-        logger.warning("{:%Hh%Mm%Ss}: Task deployed to pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+        logger.warning("{:%Hh%Mm%Ss}: Task deployed to pool of {:d} VMs for Resource Group '{:s}' in {:s}. Fill the 'tasks' queue and then run 'start-task' to run the task.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
 
 def deploy_task_vm(vm, args):
     vm_name = vm["name"]
@@ -595,6 +601,23 @@ def deploy_task_vm(vm, args):
         logger.warning("Successfully copied setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(task_source_dir, task_dest_dir, vm_name))
     else:
         logger.warning("Failed to copy setup directory '{:s}' to directory '{:s}' on VM '{:s}'.".format(task_source_dir, task_dest_dir, vm_name))
+
+def start_task(args):
+    vms = get_vms(args)
+    num_vms = len(vms)
+    if(num_vms == 0):
+        print_vm_table(vms, args)
+        logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
+    else:
+        start_time = datetime.now()
+        logger.warning("{:%Hh%Mm%Ss}: Starting task on pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        result = [start_task_vm(vm, args) for vm in vms]
+        logger.warning("{:%Hh%Mm%Ss}: Task started on pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+
+def start_task_vm(vm, args):
+    task_dest_dir = args.task_directory
+    task_script = os.path.join(task_dest_dir, args.task_script)
+    vm_name = vm["name"]
     # Make task script executable
     success = vm_make_exec(vm, task_script, args)
     # Run task script
@@ -603,6 +626,29 @@ def deploy_task_vm(vm, args):
         logger.warning("Successfully started script '{:s}' on VM '{:s}'.".format(task_script, vm_name))
     else:
         logger.warning("Failed to start script '{:s}' on VM '{:s}'.".format(task_script, vm_name))
+
+def kill_task(args):
+    vms = get_vms(args)
+    num_vms = len(vms)
+    if(num_vms == 0):
+        print_vm_table(vms, args)
+        logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
+    else:
+        start_time = datetime.now()
+        # Kill task on all poll VMs
+        logger.warning("{:%Hh%Mm%Ss}: Killing task on pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        result = [kill_task_vm(vm, args) for vm in vms]
+        logger.warning("{:%Hh%Mm%Ss}: Task killed on pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+
+def kill_task_vm(vm, args):
+    vm_name = vm["name"]
+    # Run script to kill anything running in screen
+    kill_script = "killall screen"
+    success = vm_run_script(vm, kill_script, args)
+    if(success):
+        logger.warning("Successfully killed task on VM '{:s}'.".format(vm_name))
+    else:
+        logger.warning("Failed to kill task on VM '{:s}'.".format( vm_name))
 
 def show_pool(args):
     vms = get_vms(args)
