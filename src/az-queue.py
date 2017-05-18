@@ -154,6 +154,10 @@ def has_tasks(queue_name, args):
     num_msgs = queue_length(queue_name, args)
     return(num_msgs > 0)
 
+def ensure_exists(directory):
+    if(directory and not os.path.exists(directory)):
+        os.makedirs(directory)
+
 ## ------------------
 ## TOP-LEVEL COMMANDS
 ## ------------------
@@ -220,8 +224,7 @@ def fetch(args):
             print("No tasks to fetch")
         else:
             output_dir = os.path.dirname(output_path)
-            if(not os.path.exists(output_dir)):
-                os.makedirs(output_dir)
+            ensure_exists(output_dir)
             with open(output_path, 'w+') as f:
                 f.write(task)
         print("{:d} messages in queue '{:s}'".format(queue_length(queue_name, args), queue_name))

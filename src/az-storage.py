@@ -76,6 +76,10 @@ def get_blob_service(args):
     account = get_storage_account(args)
     return account.create_block_blob_service()
 
+def ensure_exists(directory):
+    if(directory and not os.path.exists(directory)):
+        os.makedirs(directory)
+
 ## ------------------
 ## TOP-LEVEL COMMANDS
 ## ------------------
@@ -109,8 +113,7 @@ def fetch_blob(args):
         print("Blob '{:s}' does not exist in container '{:s}'. Skipping fetch.".format(blob_name, container_name))
     else:
         output_dir = os.path.dirname(output_path)
-        if(not os.path.exists(output_dir)):
-            os.makedirs(output_dir)
+        ensure_exists(output_dir)
         blob_service.get_blob_to_path(container_name, blob_name, output_path)
         print("Blob '{:s}' fetched from container '{:s}' to file '{:s}'.".format(blob_name, container_name, output_path))
 

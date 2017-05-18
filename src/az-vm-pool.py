@@ -110,10 +110,9 @@ def main():
     # cached credentials are stored in 'accessTokens.json' rather than
     # 'azureProfile.json', ACCOUNT.load(os.path.join(azure_folder,
     # 'azureProfile.json')) is required for credential caching to work.
-    azure_folder = get_config_dir()
-    if not os.path.exists(azure_folder):
-        os.makedirs(azure_folder)
-    ACCOUNT.load(os.path.join(azure_folder, 'azureProfile.json'))
+    azure_dir = get_config_dir()
+    ensure_exists(azure_dir)
+    ACCOUNT.load(os.path.join(azure_dir, 'azureProfile.json'))
 
     # Configure APPLICATION
     APPLICATION.initialize(Configuration())
@@ -273,8 +272,7 @@ def ssh_public_key_path(args):
     return os.path.join(args.ssh_key_directory, ssh_public_key_filename(args))
 
 def gen_ssh_keys(args):
-    if(not os.path.exists(args.ssh_key_directory)):
-        os.makedirs(args.ssh_key_directory)
+    ensure_exists(args.ssh_key_directory)
     ssh_key_path = ssh_private_key_path(args)
     ssh_key_filename_opt = "-f{0}".format(ssh_key_path)
     ssh_type_opt = "-trsa"
@@ -417,8 +415,7 @@ def pool_data_container_sas(args):
     commands = ["storage", "container", "generate-sas"]
     options = [name_opt, connection_string_opt, permissions_opt, https_opt, expiry_opt]
     result = APPLICATION.execute(commands + options).result
-    if(not os.path.exists(args.sas_directory)):
-        os.makedirs(args.sas_directory)
+    ensure_exists(args.sas_directory)
     filepath = os.path.join(args.sas_directory, container_sas_filename(container_name, args))
     with open(filepath, 'w+') as f:
         f.write(result)
@@ -463,6 +460,10 @@ def vm_upload_dir(vm, source_dir, dest_dir, args):
     vm_run_script(vm, remove_dir_script, args)
     result = subprocess.call(command, stderr=subprocess.STDOUT)
     return(result == 0)
+
+def ensure_exists(directory):
+    if(directory and not os.path.exists(directory)):
+        os.makedirs(directory)
 
 ## ------------------
 ## TOP-LEVEL COMMANDS
