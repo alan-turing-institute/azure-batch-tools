@@ -90,9 +90,12 @@ def put_blob(args):
     blob_service = get_blob_service(args)
     container_name = args.container
     input_path = args.input_path
-    blob_name = os.path.basename(input_path)
+    if(args.blob == None):
+        blob_name = os.path.basename(input_path)
+    else:
+        blob_name = args.blob
     success = blob_service.create_blob_from_path(container_name, blob_name, input_path)
-    print("Blob '{:s}' uploaded to container '{:s}' from file '{:s}'.".format(blob_name, container_name, input_path))
+    print("File '{:s}' uploaded to container '{:s}' as '{:s}'.".format(input_path, container_name, blob_name))
 
 def fetch_blob(args):
     blob_service = get_blob_service(args)
