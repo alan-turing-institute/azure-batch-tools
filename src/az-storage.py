@@ -35,7 +35,7 @@ def main():
     args.container_sas_prefix = DEFAULT_CONTAINER_SAS_PREFIX
 
     # Enforce conditional required arguments
-    if(args.command in ['put', 'fetch', 'delete'] and args.blob == None):
+    if(args.command in ['fetch', 'delete'] and args.blob == None):
         parser.error("Blob name required for command '{:s}'. Please provide using '-b' or '--blob'".format(args.command))
     if(args.command in ['put'] and args.input_path == None):
         parser.error("Input path required for command '{:s}'. Please provide using '-i' or '--input-path'".format(args.command))
