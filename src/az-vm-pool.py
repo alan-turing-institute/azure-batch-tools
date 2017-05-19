@@ -81,6 +81,16 @@ def main():
         help="Directory containing 'setup', 'deploy' and 'task' directories for the pool.")
 
     args = parser.parse_args()
+    # Enforce conditional required arguments
+    if(args.command in ['create-pool'] and args.num_vms == None):
+        parser.error("Number of VMs required for command '{:s}'. Please provide using '-n' or '--num-vms'".format(args.command))
+    if(args.command in ['create-pool'] and args.vm_size == None):
+        parser.error("Size of VMs required for command '{:s}'. Please provide using '-s' or '--vm-size'. Available VM sizes in pool region can be listed using the 'list-sizes' command.".format(args.command))
+    if(args.command in ['setup-pool'] and args.pool_directory == None):
+        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'setup' subfolder using '-p' or '--pool-directory'".format(args.command))
+    if(args.command in ['task-pool'] and args.pool_directory == None):
+        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'task' subfolder using '-p' or '--pool-directory'".format(args.command))
+
 
     # Add some default arguments that we won't clutter up the command line with
     args.ssh_key_directory = DEFAULT_SSH_KEY_DIRECTORY
