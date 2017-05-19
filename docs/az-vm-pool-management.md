@@ -72,6 +72,56 @@ The above command stops and deallocates all VMs in the VM pool for resource grou
 
 The above command starts all VMs in the VM pool for resource group `testpool93647`. Combine dwith the `stop-all` command, this lets you start and stop a VM pool to manage costs without needing to delete and create it each time.
 
+## Setup all VMs in a pool
+`python az-vm-pool.py testpool93647 setup-pool --pool-directory=pooldirectory`
+
+The above command uploads the `pooldirectory/setup/` folder to each VM and then runs the `setup/run.sh` setup script. Note that the connection to each VM is dropped after the `setup/run.sh` script is started, so you need to ensure that you wait for the script to finish on all VMs before starting any tasks. To see if the setup script is still running on a VM:
+
+  - Connect via SSH using `ssh <vm-name>.<pool-location>.cloudapp.azure.com -i <path-to-pivate-ssh-key>`
+  - View the output of any running setup script using `screen`: `screen -R`
+
+## Deploy task to all VMs in a pool
+`python az-vm-pool.py testpool93647 deploy-task --pool-directory=pooldirectory`
+
+The above command uploads the `pooldirectory/task/` folder to each VM, deleting any existing VM `task` directory before doing so. Amend the `pooldirectory/task/run.sh` script to run your task script within the task loop. The `pooldirectory/task/run.sh` script will pull new tasks from the queue, run the task script for each task and exit when the queue is empty. Your task script is responsible for uploading any output files to Azure. You should use the following command within your task script for each file you need to upload:
+
+- `python az-storage <resource-group> put -input_path=<file-path>`
+
+This will upload the file to a blob with the same filename in the VM pool `data` storage container.
+
+Note that the `az-queue.py` script will pull a new task from the queue even if the task script for the previous task failed. The failed taks will not be re-run automatically.
+
+## Queue tasks to be processed by a VM pool
+`pooldirectory/deploy/run.sh`
+
+Amend the file in `pooldirectory/deploy/run.sh` to call your own script for generating tasks and uploading them to the VM pool Azure queue. Your script should construct each task as a single string that can be executed in the bash shell on each VM. Each task should be written as a separate line to a single tasks file. You should use the following commands to add the tasks from this file to the task queue and save the task file to the VM pool `data` storage container.
+
+- `python az-queue.py <resource-group> <queue-name> fill --input-path=<task_file_path>`
+- `python az-storage <resource-group> put -input_path=<task-file-path>`
+
+Note that any existing file of the same name will be overwritten, so it is suggested that you make the name of your task file unique each time your task generator script is run (e.g. by pre-pending a timestamp).
+
+If you want to ensure that any tasks already existing in the queue are discarded before your newly generated tasks are added to the queue, use the following command.
+
+- `python az-queue.py <resource-group> <queue-name> empty`
+
+To see how many task are currently in a queue, use the following command.
+
+- `python az-queue.py <resource-group> <queue-name> status`
+
+## Start a task on all VMs in a pool
+`python az-vm-pool.py testpool93647 start-task`
+
+The above command runs the `task/run.sh` script on each VM before disconnecting. We use the `screen` command on the VM for this. To view the output of a running task on a VM:
+
+  - Connect via SSH using `ssh <vm-name>.<pool-location>.cloudapp.azure.com -i <path-to-pivate-ssh-key>`
+  - View the output of any running task using `screen -R`
+
+## Kill a task on all VMs in a pool
+`python az-vm-pool.py testpool93647 kill-task`
+
+The above command kills any running tasks by killing all `screen` processes on each VM.
+
 ### Delete a VM pool
 `python az-vm-pool.py testpool93647 delete-pool`
 
