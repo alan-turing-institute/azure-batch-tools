@@ -22,8 +22,9 @@ params = Dict(
 )
 
 start = time()
-
-a = readdlm("data/ratings.csv", ',', Int)
+scriptdir = dirname(@__FILE__)
+println(scriptdir)
+a = readdlm(scriptdir * "/data/ratings.csv", ',', Int)
 R = a[:,1:3]
 
 println("($(time()-start)s) -- read the data")
@@ -108,8 +109,8 @@ println("($(time()-start)s) -- created the graph + sim")
 
 println("($(time()-start)s) -- finished the simulation")
 
-filename = "child_$(CHILDNAME).jld"
-save(filename,
+filepath = scriptdir * "/child_$(CHILDNAME).jld"
+save(filepath,
         "evlist", all_evlist.evl,
         "details", details,
         "params", params)
@@ -117,8 +118,9 @@ save(filename,
 println("($(time()-start)s) -- saved the results")
 
 resourcegroup = "mortest42"
-saspath  = "secrets/azure_vm_pool_mortest42_sas_servicebus_management.txt"
-pushcommand = `/usr/bin/env python az-storage.py $resourcegroup put -i $filename --sas-path $saspath`
+saspath  = scriptdir * "/secrets/azure_vm_pool_mortest42_sas_storage_container_data.txt"
+storagescript = scriptdir * "/az-storage.py"
+pushcommand = `python $storagescript $resourcegroup put -i $filepath --sas-path $saspath`
 
 run(pushcommand)
 

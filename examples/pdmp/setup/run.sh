@@ -4,7 +4,9 @@ sudo apt-get --yes --force-yes  update
 sudo apt-get --yes --force-yes dist-upgrade
 # Install python stuff we use
 sudo apt --yes --force-yes install python-pip
-sudo -H pip install --upgrade azure-servicebus azure-storage
+sudo apt-get --yes --force-yes install libssl-dev
+sudo pip install --upgrade pip
+sudo pip install --upgrade azure-servicebus azure-storage
 # Add juliareleases Personal Package Archive (PPA)
 sudo add-apt-repository --yes ppa:staticfloat/juliareleases
 sudo apt-get --yes --force-yes update
