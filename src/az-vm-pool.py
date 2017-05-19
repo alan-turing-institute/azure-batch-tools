@@ -36,6 +36,8 @@ DEFAULT_SAS_DIRECTORY = 'secrets'
 DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:16.04.201703300'
 DEFAULT_OS_CONTAINER_NAME = "vhds"
 DEFAULT_DATA_CONTAINER_NAME = "data"
+DEFAULT_SSH_KEY_CONTAINER_NAME = "sshkeys"
+DEFAULT_VM_SECRETS_CONTAINER_NAME = "vmsecrets"
 DEFAULT_CONTAINER_SAS_PREFIX = "sas_storage_container"
 DEFAULT_SAS_EXPIRY_DAYS = 14
 DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
@@ -45,6 +47,7 @@ TASK_DIRECTORY = "task"
 SETUP_SCRIPT = "run.sh"
 DEPLOY_SCRIPT = "run.sh"
 TASK_SCRIPT = "run.sh"
+
 
 # Set up some exit statuses
 CLEAN_EXIT = 0
@@ -56,7 +59,7 @@ def main():
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
         help='Name of VM pool resource group.')
-    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'start-task', 'kill-task', 'refresh-sas'])
+    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'start-task', 'kill-task', 'refresh-sas', 'get-ssh'])
     parser.add_argument('--num-vms', '-n', type=int,
         help='Number of VMs to create in pool.')
     parser.add_argument('--vm-size', '-s',
@@ -98,6 +101,8 @@ def main():
     args.vm_image = DEFAULT_VM_IMAGE
     args.os_container_name = DEFAULT_OS_CONTAINER_NAME
     args.data_container_name = DEFAULT_DATA_CONTAINER_NAME
+    args.ssh_key_container_name = DEFAULT_SSH_KEY_CONTAINER_NAME
+    args.vm_secrets_container_name = DEFAULT_VM_SECRETS_CONTAINER_NAME
     args.container_sas_prefix = DEFAULT_CONTAINER_SAS_PREFIX
     args.pool_file_prefix = DEFAULT_POOL_FILE_PREFIX
     args.setup_directory = SETUP_DIRECTORY
@@ -161,6 +166,8 @@ def main():
         delete_pool(args)
     elif(args.command == 'refresh-sas'):
         refresh_sas(args)
+    elif(args.command == 'get-ssh'):
+        get_ssh(args)
     else:
         logger.warning("Unsupported command")
 
@@ -285,6 +292,18 @@ def ssh_private_key_path(args):
 def ssh_public_key_path(args):
     return os.path.join(args.ssh_key_directory, ssh_public_key_filename(args))
 
+def get_ssh_private_key(args):
+    key_path = ssh_private_key_path(args)
+    with open(key_path, 'r') as f:
+        key = f.read()
+    return key
+
+def get_ssh_public_key(args):
+    key_path = ssh_public_key_path(args)
+    with open(key_path, 'r') as f:
+        key = f.read()
+    return key
+
 def gen_ssh_keys(args):
     ensure_exists(args.ssh_key_directory)
     ssh_key_path = ssh_private_key_path(args)
@@ -387,10 +406,28 @@ def pool_os_container_name(args, with_extension = False):
 def pool_data_container_name(args):
     return "{:s}".format(args.data_container_name)
 
+def pool_ssh_key_container_name(args):
+    return "{:s}".format(args.ssh_key_container_name)
+
+def pool_vm_secrets_container_name(args):
+    return "{:s}".format(args.vm_secrets_container_name)
+
 def create_pool_data_container(args):
+    container_name = pool_data_container_name(args)
+    create_pool_container(container_name, args)
+
+def create_pool_ssh_key_container(args):
+    container_name = pool_ssh_key_container_name(args)
+    create_pool_container(container_name, args)
+
+def create_pool_vm_secrets_container(args):
+    container_name = pool_vm_secrets_container_name(args)
+    create_pool_container(container_name, args)
+
+def create_pool_container(container_name, args):
     connection_string = pool_storage_account_connection_string(args)
     storage_container_name = pool_data_container_name(args)
-    container_name_opt = "--name={0}".format(storage_container_name)
+    container_name_opt = "--name={0}".format(container_name)
     connection_string_opt = "--connection-string={0}".format(connection_string)
     commands = ["storage", "container", "create"]
     options = [container_name_opt, connection_string_opt]
@@ -430,10 +467,10 @@ def pool_data_container_sas(args):
     options = [name_opt, connection_string_opt, permissions_opt, https_opt, expiry_opt]
     result = APPLICATION.execute(commands + options).result
     ensure_exists(args.sas_directory)
-    filepath = os.path.join(args.sas_directory, container_sas_filename(container_name, args))
-    with open(filepath, 'w+') as f:
+    file_path = os.path.join(args.sas_directory, container_sas_filename(container_name, args))
+    with open(file_path, 'w+') as f:
         f.write(result)
-        logger.warning("New SAS token for pool data container '{:s}' written to '{:s}'. SAS token exires on {:%Y-%m-%dT%H:%MZ}.".format(container_name, filepath, expiry_datetime))
+        logger.warning("New SAS token for pool data container '{:s}' written to '{:s}'. SAS token expires on {:%Y-%m-%dT%H:%MZ}.".format(container_name, file_path, expiry_datetime))
     return result
 
 def vm_url(vm, args):
@@ -441,12 +478,13 @@ def vm_url(vm, args):
 
 def vm_run_script(vm, script, args, detach=False):
     ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
+    strict_host_check_opt = "StrictHostKeyChecking=no"
     host_opt = "{:s}".format(vm_url(vm, args))
     if(detach):
         script_opt = "screen -d -m {:s}".format(script)
     else:
         script_opt = script
-    command = ["ssh", host_opt, "-i", ssh_key_opt, script_opt]
+    command = ["ssh", host_opt, "-i", ssh_key_opt, "-o", strict_host_check_opt, script_opt]
     result = subprocess.call(command, stderr=subprocess.STDOUT)
     return(result == 0)
 
@@ -466,9 +504,10 @@ def vm_make_exec(vm, script, args):
 
 def vm_upload_dir(vm, source_dir, dest_dir, args):
     ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
+    strict_host_check_opt = "StrictHostKeyChecking=no"
     source_opt = source_dir
     dest_opt = "{:s}:{:s}".format(vm_url(vm, args) ,dest_dir)
-    command = ["scp", "-i", ssh_key_opt, "-r", source_opt, dest_opt]
+    command = ["scp", "-i", ssh_key_opt, "-o", strict_host_check_opt, "-r", source_opt, dest_opt]
     # First remove directory if it exists already
     remove_dir_script = "rm -r {:s}".format(dest_dir)
     vm_run_script(vm, remove_dir_script, args)
@@ -478,6 +517,82 @@ def vm_upload_dir(vm, source_dir, dest_dir, args):
 def ensure_exists(directory):
     if(directory and not os.path.exists(directory)):
         os.makedirs(directory)
+
+def upload_blob(container_name, file_path, blob_name, args):
+    container_opt = "--container-name={:s}".format(container_name)
+    file_opt = "--file={:s}".format(file_path)
+    name_opt = "--name={:s}".format(blob_name)
+    connection_string_opt = "--connection-string={:s}".format(pool_storage_account_connection_string(args))
+    commands = ["storage", "blob", "upload"]
+    options = [container_opt, file_opt, name_opt, connection_string_opt]
+    result = APPLICATION.execute(commands + options).result
+
+def download_blob(container_name, file_path, blob_name, args):
+    directory = os.path.dirname(file_path)
+    ensure_exists(directory)
+    container_opt = "--container-name={:s}".format(container_name)
+    file_opt = "--file={:s}".format(file_path)
+    name_opt = "--name={:s}".format(blob_name)
+    connection_string_opt = "--connection-string={:s}".format(pool_storage_account_connection_string(args))
+    commands = ["storage", "blob", "download"]
+    options = [container_opt, file_opt, name_opt, connection_string_opt]
+    result = APPLICATION.execute(commands + options).result
+
+def blob_exists(container_name, blob_name, args):
+    container_opt = "--container-name={:s}".format(container_name)
+    name_opt = "--name={:s}".format(blob_name)
+    connection_string_opt = "--connection-string={:s}".format(pool_storage_account_connection_string(args))
+    commands = ["storage", "blob", "exists"]
+    options = [container_opt, name_opt, connection_string_opt]
+    result = APPLICATION.execute(commands + options).result
+
+def upload_ssh_keys(args):
+    container_name = pool_ssh_key_container_name(args)
+    # Create SSH storage container if it doesn't exist
+    create_pool_ssh_key_container(args)
+    # Upload SSH private/public key pair
+    private_blob_name = ssh_private_key_filename(args)
+    private_file_path = ssh_private_key_path(args)
+    upload_blob(container_name, private_file_path, private_blob_name, args)
+    logger.warning("Private SSH key '{:s}' uploaded to '{:s}' in container '{:s}'.".format(private_file_path, private_blob_name, container_name))
+    public_blob_name = ssh_public_key_filename(args)
+    public_file_path = ssh_public_key_path(args)
+    upload_blob(container_name, public_file_path, public_blob_name, args)
+    logger.warning("Public SSH key '{:s}' uploaded to '{:s}' in container '{:s}'.".format(public_file_path, public_blob_name, container_name))
+
+def download_ssh_keys(args):
+    container_name = pool_ssh_key_container_name(args)
+    # Create SSH storage container if it doesn't exist
+    create_pool_ssh_key_container(args)
+    # Upload SSH private/public key pair
+    private_blob_name = ssh_private_key_filename(args)
+    private_file_path = ssh_private_key_path(args)
+    download_blob(container_name, private_file_path, private_blob_name, args)
+    # Fix key permissions
+    command = ['chmod', '600', private_file_path]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    logger.warning("Private SSH key '{:s}' downloaded from container '{:s}' to '{:s}'.".format(private_blob_name, container_name, private_file_path))
+    public_blob_name = ssh_public_key_filename(args)
+    public_file_path = ssh_public_key_path(args)
+    download_blob(container_name, public_file_path, public_blob_name, args)
+    # Fix key permissions
+    command = ['chmod', '644', public_file_path]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    logger.warning("Public SSH key '{:s}' downloaded from container '{:s}' to '{:s}'.".format(public_blob_name, container_name, public_file_path))
+
+def remove_ssh_host(vm, args):
+    hostname = vm_url(vm, args)
+    command = ['ssh-keygen', '-R', hostname]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+
+def vm_test_ssh(vm, args):
+    ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
+    strict_host_check_opt = "StrictHostKeyChecking=no"
+    host_opt = "{:s}".format(vm_url(vm, args))
+    script_opt = "exit"
+    command = ["ssh", host_opt, "-i", ssh_key_opt, "-o", strict_host_check_opt, script_opt]
+    result = subprocess.call(command, stderr=subprocess.STDOUT)
+    return(result == 0)
 
 ## ------------------
 ## TOP-LEVEL COMMANDS
@@ -496,12 +611,20 @@ def create_pool(args):
     else:
         start_time = datetime.now()
         logger.warning("{:%Hh%Mm%Ss}: Creating pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group))
+        logger.warning("{:%Hh%Mm%Ss}: Creating SSH keys for VM pool {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group))
         gen_ssh_keys(args)
+        upload_ssh_keys(args)
         logger.warning("{:%Hh%Mm%Ss}: Creating pool data container '{:s}' if it doesn't already exist.".format(datetime.now(), pool_data_container_name(args)))
         create_pool_data_container(args)
         result = [create_vm(i, args) for i in range(0, args.num_vms)]
-        # Refresh VMs and print pool  info
+        # Refresh VMs
         vms = get_vms(args)
+        logger.warning("{:%Hh%Mm%Ss}: Removing any existing SSH host entries for each VM.".format(datetime.now()))
+        [remove_ssh_host(vm, args) for vm in vms]
+        # Connect to each VM to validate keys and get host fingerprint acceptance from user
+        logger.warning("{:%Hh%Mm%Ss}: Testing SSH connection to each VM".format(datetime.now()))
+        [vm_test_ssh(vm, args) for vm in vms]
+        # Print pool info
         print_vm_table(vms, args)
         logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' created in {:s}.".format(datetime.now(), args.num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
 
@@ -754,7 +877,20 @@ def delete_vm(vm, args, force):
     return(result)
 
 def refresh_sas(args):
+    logger.warning("Refreshing SAS tokens.")
     pool_data_container_sas(args)
+
+def get_ssh(args):
+    logger.warning("Getting SSH keys for VM pool.")
+    download_ssh_keys(args)
+    vms = get_vms(args)
+    # Remove existing SSH hostnames
+    logger.warning("Removing existing SSH host entries for VM pool")
+    [remove_ssh_host(vm, args) for vm in vms]
+    # Connect to each VM to validate keys and get host fingerprint acceptance from user
+    logger.warning("Testing SSH connection to each VM")
+    [vm_test_ssh(vm, args) for vm in vms]
+
 
 if __name__ == "__main__":
     main()
