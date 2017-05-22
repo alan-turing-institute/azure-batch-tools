@@ -47,7 +47,7 @@ TASK_DIRECTORY = "task"
 SETUP_SCRIPT = "run.sh"
 DEPLOY_SCRIPT = "run.sh"
 TASK_SCRIPT = "run.sh"
-
+DEFAULT_VM_USER = "vm-admin"
 
 # Set up some exit statuses
 CLEAN_EXIT = 0
@@ -111,6 +111,7 @@ def main():
     args.setup_script = SETUP_SCRIPT
     args.deploy_script = DEPLOY_SCRIPT
     args.task_script = TASK_SCRIPT
+    args.vm_user = DEFAULT_VM_USER
 
     azlogging.configure_logging("")
 
@@ -306,10 +307,11 @@ def get_ssh_public_key(args):
 
 def gen_ssh_keys(args):
     ensure_exists(args.ssh_key_directory)
-    ssh_key_path = ssh_private_key_path(args)
-    ssh_key_filename_opt = "-f{0}".format(ssh_key_path)
-    ssh_type_opt = "-trsa"
-    result = subprocess.call(["ssh-keygen", ssh_type_opt, ssh_key_filename_opt], stderr=subprocess.STDOUT)
+    key_path = ssh_private_key_path(args)
+    key_filename_opt = "-f{0}".format(key_path)
+    key_type_opt = "-trsa"
+    comment_opt = "-C{:s}@{:s}.az-vm-pool".format(args.vm_user, args.resource_group)
+    result = subprocess.call(["ssh-keygen", key_type_opt, key_filename_opt, comment_opt], stderr=subprocess.STDOUT)
     if(result != 0):
         logger.warning("Did not create new SSH key pair for new VM pool.")
 
@@ -479,7 +481,7 @@ def vm_url(vm, args):
 def vm_run_script(vm, script, args, detach=False):
     ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
     strict_host_check_opt = "StrictHostKeyChecking=no"
-    host_opt = "{:s}".format(vm_url(vm, args))
+    host_opt = "{:s}@{:s}".format(args.vm_user, vm_url(vm, args))
     if(detach):
         script_opt = "screen -d -m {:s}".format(script)
     else:
@@ -661,13 +663,14 @@ def create_vm(vm_number, args):
     location_opt = "--location={0}".format(get_resource_group_location(args))
     size_opt = "--size={0}".format(args.vm_size)
     nics_opt = "--nics={0}".format(nic_name)
+    user_opt = "--admin-username={0}".format(args.vm_user)
     unmanaged_opt = "--use-unmanaged-disk"
     storage_account_opt = "--storage-account={0}".format(storage_account_name)
     storage_container_opt = "--storage-container-name={0}".format(os_container_name)
     os_disk_name_opt = "--os-disk-name={0}".format(os_disk_name)
     # Construct commands and options
     commands = ["vm", "create"]
-    options = [name_opt, ssh_opt, image_opt, location_opt, size_opt, nics_opt, unmanaged_opt, storage_account_opt, storage_container_opt, os_disk_name_opt]
+    options = [name_opt, ssh_opt, image_opt, location_opt, size_opt, nics_opt, unmanaged_opt, storage_account_opt, storage_container_opt, os_disk_name_opt, user_opt]
     # Create VM
     logger.warning("{:%Hh%Mm%Ss}: Creating VM '{:s}'.".format(datetime.now(), vm_name))
     result = vm_pool_command(commands, options, args)
