@@ -569,9 +569,7 @@ def upload_ssh_keys(args):
 
 def download_ssh_keys(args):
     container_name = pool_ssh_key_container_name(args)
-    # Create SSH storage container if it doesn't exist
-    create_pool_ssh_key_container(args)
-    # Upload SSH private/public key pair
+    # Download SSH private/public key pair
     private_blob_name = ssh_private_key_filename(args)
     private_file_path = ssh_private_key_path(args)
     download_blob(container_name, private_file_path, private_blob_name, args)
