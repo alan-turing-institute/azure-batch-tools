@@ -80,7 +80,6 @@ def main():
         default = DEFAULT_SAS_EXPIRY_DAYS,
         help="Number of days the generated Shared Access Signature (SAS) access code for the VM pool storage container should be valid for.")
     parser.add_argument("--pool-directory", "-d",
-        default = ".",
         help="Directory containing 'setup', 'deploy' and 'task' directories for the pool.")
     parser.add_argument("--no-wait", action='store_true',
         help="Do not wait for each VM creation or setup to complete before starting creation or setup of next VM. WARNING: If set, you must check yourself that all creation or setup of all VMs in pool is complete before starting next step of deployment.)")
@@ -92,9 +91,9 @@ def main():
     if(args.command in ['create-pool'] and args.vm_size == None):
         parser.error("Size of VMs required for command '{:s}'. Please provide using '-s' or '--vm-size'. Available VM sizes in pool region can be listed using the 'list-sizes' command.".format(args.command))
     if(args.command in ['setup-pool'] and args.pool_directory == None):
-        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'setup' subfolder using '-p' or '--pool-directory'".format(args.command))
-    if(args.command in ['task-pool'] and args.pool_directory == None):
-        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'task' subfolder using '-p' or '--pool-directory'".format(args.command))
+        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'setup' subfolder using '-d' or '--pool-directory'".format(args.command))
+    if(args.command in ['start-task'] and args.pool_directory == None):
+        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'task' subfolder using '-d' or '--pool-directory'".format(args.command))
     if(args.command not in ['create-pool', 'setup-pool', 'start-all', 'stop-all'] and args.no_wait):
         parser.error("'--no-wait' not supported for command '{:s}'".format(args.command))
 
