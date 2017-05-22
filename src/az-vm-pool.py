@@ -82,6 +82,8 @@ def main():
     parser.add_argument("--pool-directory", "-d",
         default = ".",
         help="Directory containing 'setup', 'deploy' and 'task' directories for the pool.")
+    parser.add_argument("--no-wait", action='store_true',
+        help="Do not wait for each VM creation or setup to complete before starting creation or setup of next VM. WARNING: If set, you must check yourself that all creation or setup of all VMs in pool is complete before starting next step of deployment.)")
 
     args = parser.parse_args()
     # Enforce conditional required arguments
@@ -93,6 +95,9 @@ def main():
         parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'setup' subfolder using '-p' or '--pool-directory'".format(args.command))
     if(args.command in ['task-pool'] and args.pool_directory == None):
         parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'task' subfolder using '-p' or '--pool-directory'".format(args.command))
+    if(args.command not in ['create-pool', 'setup-pool', 'start-all', 'stop-all'] and args.no_wait):
+        parser.error("'--no-wait' not supported for command '{:s}'".format(args.command))
+
 
 
     # Add some default arguments that we won't clutter up the command line with
@@ -671,10 +676,16 @@ def create_vm(vm_number, args):
     # Construct commands and options
     commands = ["vm", "create"]
     options = [name_opt, ssh_opt, image_opt, location_opt, size_opt, nics_opt, unmanaged_opt, storage_account_opt, storage_container_opt, os_disk_name_opt, user_opt]
+    if(args.no_wait):
+        options.append("--no-wait")
     # Create VM
-    logger.warning("{:%Hh%Mm%Ss}: Creating VM '{:s}'.".format(datetime.now(), vm_name))
+    if(args.no_wait):
+        logger.warning("{:%Hh%Mm%Ss}: Inititating creation of VM '{:s}'.".format(datetime.now(), vm_name))
+    else:
+        logger.warning("{:%Hh%Mm%Ss}: Creating VM '{:s}'.".format(datetime.now(), vm_name))
     result = vm_pool_command(commands, options, args)
-    logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' created in {:s}".format(datetime.now(), vm_name, timedelta_string(datetime.now() - start_time)))
+    if(not(args.no_wait)):
+        logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' created in {:s}".format(datetime.now(), vm_name, timedelta_string(datetime.now() - start_time)))
     return(result)
 
 def setup_pool(args):
@@ -685,9 +696,15 @@ def setup_pool(args):
         logger.warning("No VM pool exists. Use 'create-pool' command to create a new pool.")
     else:
         start_time = datetime.now()
-        logger.warning("{:%Hh%Mm%Ss}: Initiating setup for pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        if(args.no_wait):
+            logger.warning("{:%Hh%Mm%Ss}: Initiating setup for pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
+        else:
+            logger.warning("{:%Hh%Mm%Ss}: Setting up pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
         result = [setup_vm(vm, args) for vm in vms]
-        logger.warning("{:%Hh%Mm%Ss}: Setup initiated for pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+        if(args.no_wait):
+            logger.warning("{:%Hh%Mm%Ss}: Setup initiated for pool of {:d} VMs for Resource Group '{:s}'. To check if setup is still running on a VM, SSH into it and run 'screen -R'.".format(datetime.now(), num_vms, args.resource_group))
+        else:
+            logger.warning("{:%Hh%Mm%Ss}: Setup completed for pool of {:d} VMs for Resource Group '{:s}' in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
 
 def setup_vm(vm, args):
     vm_name = vm["name"]
@@ -704,11 +721,16 @@ def setup_vm(vm, args):
     # Make setup script executable
     success = vm_make_exec(vm, setup_script, args)
     # Run setup script
-    success = vm_run_script(vm, setup_script, args, detach=True)
-    if(success):
-        logger.warning("Successfully initiated setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+    if(args.no_wait):
+        detach = True
     else:
-        logger.warning("Failed to initiate setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+        detach = False
+    success = vm_run_script(vm, setup_script, args, detach=detach)
+    if(not(args.no_wait)):
+        if(success):
+            logger.warning("Successfully ran setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
+        else:
+            logger.warning("Failed to run setup script '{:s}' on VM '{:s}'.".format(setup_script, vm_name))
 
 def deploy_task(args):
     vms = get_vms(args)
@@ -798,8 +820,11 @@ def start_all(args):
     result = [start_vm(vm, args) for vm in vms]
     vms = get_vms(args)
     print_vm_table(vms, args)
-    logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' started in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
-    return result
+    if(args.no_wait):
+        logger.warning("{:%Hh%Mm%Ss}: Startup initiated for pool of {:d} VMs for Resource Group '{:s}'. Run 'show-pool' command to check when operation is completed.".format(datetime.now(), num_vms, args.resource_group))
+    else:
+        logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' started in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+    return(result)
 
 def start_vm(vm, args):
     if(vm["powerState"] == "VM running"):
@@ -809,8 +834,13 @@ def start_vm(vm, args):
         start_time = datetime.now()
         logger.warning("{:%Hh%Mm%Ss}: Starting VM '{:s}'.".format(datetime.now(), vm["name"]))
         name_opt = "--name={0}".format(vm["name"])
-        result = vm_pool_command(["vm", "start"],[name_opt], args)
-        logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' started in {:s}".format(datetime.now(), vm["name"], timedelta_string(datetime.now() - start_time)))
+        options = [name_opt]
+        commands = ["vm", "start"]
+        if(args.no_wait):
+            options.append("--no-wait")
+        result = vm_pool_command(commands,options, args)
+        if(not(args.no_wait)):
+            logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' started in {:s}".format(datetime.now(), vm_name, timedelta_string(datetime.now() - start_time)))
         return(result)
 
 def shutdown_all(args):
@@ -821,7 +851,10 @@ def shutdown_all(args):
     result = [shutdown_vm(vm, args) for vm in vms]
     vms = get_vms(args)
     print_vm_table(vms, args)
-    logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' stopped in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
+    if(args.no_wait):
+        logger.warning("{:%Hh%Mm%Ss}: Shutdown initiated for pool of {:d} VMs for Resource Group '{:s}'. Run 'show-pool' command to check when operation is completed.".format(datetime.now(), num_vms, args.resource_group))
+    else:
+        logger.warning("{:%Hh%Mm%Ss}: Pool of {:d} VMs for Resource Group '{:s}' stopped in {:s}.".format(datetime.now(), num_vms, args.resource_group, timedelta_string(datetime.now() - start_time)))
     return(result)
 
 def shutdown_vm(vm, args):
@@ -832,8 +865,13 @@ def shutdown_vm(vm, args):
         start_time = datetime.now()
         logger.warning("{:%Hh%Mm%Ss}: Deallocating VM '{:s}'.".format(datetime.now(), vm["name"]))
         name_opt = "--name={0}".format(vm["name"])
-        result = vm_pool_command(["vm", "deallocate"],[name_opt], args)
-        logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' deallocated in {:s}".format(datetime.now(), vm["name"], timedelta_string(datetime.now() - start_time)))
+        options = [name_opt]
+        commands = ["vm", "deallocate"]
+        if(args.no_wait):
+            options.append("--no-wait")
+        result = vm_pool_command(commands,options, args)
+        if(not(args.no_wait)):
+            logger.warning("{:%Hh%Mm%Ss}: VM '{:s}' deallocated in {:s}".format(datetime.now(), vm_name, timedelta_string(datetime.now() - start_time)))
         return(result)
 
 def delete_pool(args):
@@ -864,11 +902,12 @@ def delete_vm(vm, args, force):
     start_time = datetime.now()
     logger.warning("{:%Hh%Mm%Ss}: Deleting VM '{:s}'.".format(datetime.now(), vm_name))
     name_opt = "--name={0}".format(vm_name)
-    vm_opts = [name_opt]
+    options = [name_opt]
     if(force):
-        vm_opts.append("--yes")
+        options.append("--yes")
+    commands = ["vm", "delete"]
     # Delete VM
-    result = vm_pool_command(["vm", "delete"],vm_opts, args)
+    result = vm_pool_command(commands, options, args)
     # Delete NIC and Public IP address
     logger.warning("{:%Hh%Mm%Ss}: Deleting NIC '{:s}'.".format(datetime.now(), vm_name))
     vm_pool_command(["network", "nic", "delete"], [name_opt], args)

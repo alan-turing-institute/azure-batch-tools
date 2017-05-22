@@ -26,7 +26,7 @@ Some Azure resources need to be created via the [Azure management portal](https:
     - Set `Name` to the name of the Resource Group you created above
     - Set `Subnet name` to the name of the Resource Group you created above
     - Set `Resource group` to the one you created above
-    - Set `Location` to the location of the resource group    
+    - Set `Location` to the location of the resource group
   - **Azure Service Bus:**
     - From the sidebar menu, navigate to 'New (+)' -> Enterprise Integration -> Service bus_service
     - Set namespace `Name` to the name of the Resource Group you created above
@@ -50,6 +50,8 @@ General usage follows the pattern:
 
 The above command creates a pool of 10 VMs of size `Standard_DS11` in resource group `testpool93647`.
 
+By default, each VM is created one at a time in sequence. You can use the `--no-wait` flag to start deploying the next VM before creation of previous VMs is complete. If you do this, you must use the `show-pool` command to ensure that all VMs in the pool have a provisioning state of `Succeeded` and a power state of `VM running` prior to running any further steps in the deployment process.
+
 ### List available VM sizes
 `python az-vm-pool.py testpool93647 list-sizes --min-cores=2 --max-cores=8 --min-memory=24 --max-memory=56`
 
@@ -67,15 +69,21 @@ The above command stops and deallocates all VMs in the VM pool for resource grou
 
 **Note:** Azure lets you `stop` or `deallocate` a VM. Stopped VMs continue to incur the same usage charges as running VMs, while deallocated VMs do not incur any usage charges. The `stop-all` command deallocates all VMs in the pool.
 
+By default, each VM is deallocated one at a time in sequence. You can use the `--no-wait` flag to start deallocating the next VM before deallocation of previous VMs is complete. If you do this, you must use the `show-pool` command to ensure that all VMs in the pool have a provisioning state of `Succeeded` and a power state of `VM deallocated` prior to attempting to restart the pool.
+
 ### Start all VMs in a pool
 `python az-vm-pool.py testpool93647 start-all`
 
-The above command starts all VMs in the VM pool for resource group `testpool93647`. Combine dwith the `stop-all` command, this lets you start and stop a VM pool to manage costs without needing to delete and create it each time.
+The above command starts all VMs in the VM pool for resourceprovisioning state of `Succeeded` and a  group `testpool93647`. Combine dwith the `stop-all` command, this lets you start and stop a VM pool to manage costs without needing to delete and create it each time.
+
+By default, each VM is started one at a time in sequence. You can use the `--no-wait` flag to start the next VM before previous VMs have finished starting. If you do this, you must use the `show-pool` command to ensure that all VMs in the pool have a provisioning state of `Succeeded` and a power state of `VM running` prior to running any further steps in the deployment process.
 
 ## Setup all VMs in a pool
 `python az-vm-pool.py testpool93647 setup-pool --pool-directory=pooldirectory`
 
-The above command uploads the `pooldirectory/setup/` folder to each VM and then runs the `setup/run.sh` setup script. Note that the connection to each VM is dropped after the `setup/run.sh` script is started, so you need to ensure that you wait for the script to finish on all VMs before starting any tasks. To see if the setup script is still running on a VM:
+The above command uploads the `pooldirectory/setup/` folder to each VM and then runs the `setup/run.sh` setup script.
+
+By default each VM is setup one at a time, waiting for the setup script to finish on each VM before starting to setup the next VM. You can use the `--no-wait` flag to start running the setup script on the next VM before setting up of previous VMs is complete. In this case, the connection to each VM is dropped after the `setup/run.sh` script is started, so you need to ensure that you wait for the setup  script to finish on all VMs before starting any tasks. To see if the setup script is still running on a VM:
 
   - Connect via SSH using `ssh <vm-name>.<pool-location>.cloudapp.azure.com -i <path-to-pivate-ssh-key>`
   - View the output of any running setup script using `screen`: `screen -R`
