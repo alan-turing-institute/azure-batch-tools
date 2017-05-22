@@ -79,7 +79,7 @@ The above command starts all VMs in the VM pool for resourceprovisioning state o
 By default, each VM is started one at a time in sequence. You can use the `--no-wait` flag to start the next VM before previous VMs have finished starting. If you do this, you must use the `show-pool` command to ensure that all VMs in the pool have a provisioning state of `Succeeded` and a power state of `VM running` prior to running any further steps in the deployment process.
 
 ### Setup all VMs in a pool
-`python az-vm-pool.py testpool93647 setup-pool --pool-directory=pooldirectory`
+`python az-vm-pool.py testpool93647 setup-pool --pool-directory=<pool-directory>`
 
 The above command uploads the `pooldirectory/setup/` folder to each VM and then runs the `setup/run.sh` setup script.
 
@@ -89,7 +89,7 @@ By default each VM is setup one at a time, waiting for the setup script to finis
   - View the output of any running setup script using `screen`: `screen -R`
 
 ### Deploy task to all VMs in a pool
-`python az-vm-pool.py testpool93647 deploy-task --pool-directory=pooldirectory`
+`python az-vm-pool.py testpool93647 deploy-task --pool-directory=<pool-directory>`
 
 The above command uploads the `pooldirectory/task/` folder to each VM, deleting any existing VM `task` directory before doing so. Amend the `pooldirectory/task/run.sh` script to run your task script within the task loop. The `pooldirectory/task/run.sh` script will pull new tasks from the queue, run the task script for each task and exit when the queue is empty. Your task script is responsible for uploading any output files to Azure. You should use the following command within your task script for each file you need to upload:
 
@@ -134,3 +134,24 @@ The above command kills any running tasks by killing all `screen` processes on e
 `python az-vm-pool.py testpool93647 delete-pool`
 
 The above command deletes the VM pool for resource group `testpool93647`. Before deletion occurs, the VMs in the pool will be listed and you will be asked to confirm the deletion. If you do not type `y` at this prompt, the deletion will be cancelled.
+
+### Get SSH keys for VM pool management
+When a new VM pool is created, the public and private SSH keys used to access the VMs in the pool are uploaded to the `sshkeys` container for the pool. The following command will download the SSH keys for the VM pool for resource group `testpool93647` and save them to the `private-pool-ssh-keys` folder in the directory the `az-vm-pool.py` script is run.
+
+- `python az-vm-pool.py testpool93647 get-ssh`
+
+### Get VM secrets
+The `az-queue.py` and `az-storage.py` scripts are deployed onto the VMs and need to authenticate to the pool `tasks` queue and the `data` pool storage container respectively. This authentication is handled by SAS tokens. The storage token will be automatically generated and uploaded when a pool is created or the `refresh-sas` command is run. For now the queue token must be the primary key of the `RootManageSharedAccessKey` of the Service Bus containing the queue. It must also be manually uploaded to the `vmsecrets` pool storage container if it is to be fetched to a new pool management computer using the `get-secrets` command. Note that the queue SAS key file must be named `azure_vm_pool_<resource-group>_sas_servicebus_management.txt`.
+
+- `python az-vm-pool.py testpool93647 get-secrets`
+
+### Initialise local pool directory
+The`setup-pool` and `start-task` commands require a certain directory structure, with access to the VM SAS secrets as well as access to the `az-queue.py` and `az-storage.py` scripts. Generating tasks and deploying them to the pool `tasks` queue also requires this. To set up this structure and populate it with the requried scripts and secrets, use the following command.
+
+- `python az-vm-pool.py testpool93647 init-directory --pool-directory=<pool-directory>`
+
+This command will copy the `az-queue.py` and `az-storage.py` scripts and the `secrets` folder from the directory the `az-vm-pool.py` script is run from to the following pool directory folders.
+
+- `<pool-directory>/deploy`
+- `<pool-directory>/setup`
+- `<pool-directory>/task`

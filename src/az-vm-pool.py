@@ -12,6 +12,7 @@ from datetime import timedelta
 from tabulate import tabulate
 import subprocess
 import os.path
+import shutil
 
 from azure.cli.core.application import APPLICATION, Configuration
 from azure.cli.core._session import ACCOUNT, CONFIG, SESSION
@@ -32,7 +33,7 @@ AZURE_PASSWORD_CHARSET = string.ascii_lowercase + string.ascii_uppercase + strin
 
 # Some defaults
 DEFAULT_SSH_KEY_DIRECTORY = 'private-pool-ssh-keys'
-DEFAULT_SAS_DIRECTORY = 'secrets'
+DEFAULT_VM_SECRETS_DIRECTORY = 'secrets'
 DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:16.04.201703300'
 DEFAULT_OS_CONTAINER_NAME = "vhds"
 DEFAULT_DATA_CONTAINER_NAME = "data"
@@ -59,7 +60,7 @@ def main():
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
         help='Name of VM pool resource group.')
-    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'start-task', 'kill-task', 'refresh-sas', 'get-ssh'])
+    parser.add_argument('command', choices=['list-sizes', 'create-pool', 'delete-pool', 'show-pool', 'setup-pool', 'start-all', 'stop-all', 'deploy-task', 'start-task', 'kill-task', 'refresh-sas', 'get-ssh', 'get-secrets', 'init-directory'])
     parser.add_argument('--num-vms', '-n', type=int,
         help='Number of VMs to create in pool.')
     parser.add_argument('--vm-size', '-s',
@@ -94,6 +95,8 @@ def main():
         parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'setup' subfolder using '-d' or '--pool-directory'".format(args.command))
     if(args.command in ['start-task'] and args.pool_directory == None):
         parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder containing a 'task' subfolder using '-d' or '--pool-directory'".format(args.command))
+    if(args.command in ['init-directory'] and args.pool_directory == None):
+        parser.error("Pool directory required for command '{:s}'. Please provide the path to a pool folder using '-d' or '--pool-directory'".format(args.command))
     if(args.command not in ['create-pool', 'setup-pool', 'start-all', 'stop-all'] and args.no_wait):
         parser.error("'--no-wait' not supported for command '{:s}'".format(args.command))
 
@@ -101,7 +104,7 @@ def main():
 
     # Add some default arguments that we won't clutter up the command line with
     args.ssh_key_directory = DEFAULT_SSH_KEY_DIRECTORY
-    args.sas_directory = DEFAULT_SAS_DIRECTORY
+    args.vm_secrets_directory = DEFAULT_VM_SECRETS_DIRECTORY
     args.vm_image = DEFAULT_VM_IMAGE
     args.os_container_name = DEFAULT_OS_CONTAINER_NAME
     args.data_container_name = DEFAULT_DATA_CONTAINER_NAME
@@ -173,6 +176,10 @@ def main():
         refresh_sas(args)
     elif(args.command == 'get-ssh'):
         get_ssh(args)
+    elif(args.command == 'get-secrets'):
+        get_secrets(args)
+    elif(args.command == 'init-directory'):
+        initialise_pool_directory(args)
     else:
         logger.warning("Unsupported command")
 
@@ -437,7 +444,18 @@ def create_pool_container(container_name, args):
     connection_string_opt = "--connection-string={0}".format(connection_string)
     commands = ["storage", "container", "create"]
     options = [container_name_opt, connection_string_opt]
-    result = APPLICATION.execute(commands + options)
+    result = APPLICATION.execute(commands + options).result
+    return(result)
+
+def pool_container_exists(container_name, args):
+    connection_string = pool_storage_account_connection_string(args)
+    storage_container_name = pool_data_container_name(args)
+    container_name_opt = "--name={0}".format(container_name)
+    connection_string_opt = "--connection-string={0}".format(connection_string)
+    commands = ["storage", "container", "exists"]
+    options = [container_name_opt, connection_string_opt]
+    exists = APPLICATION.execute(commands + options).result["exists"]
+    return(exists)
 
 def delete_pool_os_container(args):
     # Get Storage account connection string to authenticate container delete
@@ -472,12 +490,19 @@ def pool_data_container_sas(args):
     commands = ["storage", "container", "generate-sas"]
     options = [name_opt, connection_string_opt, permissions_opt, https_opt, expiry_opt]
     result = APPLICATION.execute(commands + options).result
-    ensure_exists(args.sas_directory)
-    file_path = os.path.join(args.sas_directory, container_sas_filename(container_name, args))
+    ensure_exists(args.vm_secrets_directory)
+    file_name = container_sas_filename(container_name, args)
+    file_path = os.path.join(args.vm_secrets_directory, file_name)
     with open(file_path, 'w+') as f:
         f.write(result)
         logger.warning("New SAS token for pool data container '{:s}' written to '{:s}'. SAS token expires on {:%Y-%m-%dT%H:%MZ}.".format(container_name, file_path, expiry_datetime))
+    upload_secret(file_path, file_name, args)
     return result
+
+def upload_secret(file_path, blob_name, args):
+    container_name = pool_vm_secrets_container_name(args)
+    upload_blob(container_name, file_path, blob_name, args)
+    logger.warning("Secret '{:s}' uploaded to pool secrets container '{:s}' as '{:s}'".format(file_path, container_name, blob_name))
 
 def vm_url(vm, args):
     return("{:s}.{:s}.cloudapp.azure.com".format(vm["name"], vm["location"]))
@@ -525,6 +550,9 @@ def ensure_exists(directory):
         os.makedirs(directory)
 
 def upload_blob(container_name, file_path, blob_name, args):
+    # Ensure container exists
+    if(not(pool_container_exists(container_name, args))):
+        create_pool_container(container_name, args)
     container_opt = "--container-name={:s}".format(container_name)
     file_opt = "--file={:s}".format(file_path)
     name_opt = "--name={:s}".format(blob_name)
@@ -551,6 +579,14 @@ def blob_exists(container_name, blob_name, args):
     commands = ["storage", "blob", "exists"]
     options = [container_opt, name_opt, connection_string_opt]
     result = APPLICATION.execute(commands + options).result
+
+def list_blobs(container_name, args):
+    container_opt = "--container-name={:s}".format(container_name)
+    connection_string_opt = "--connection-string={:s}".format(pool_storage_account_connection_string(args))
+    commands = ["storage", "blob", "list"]
+    options = [container_opt, connection_string_opt]
+    result = APPLICATION.execute(commands + options).result
+    return(result)
 
 def upload_ssh_keys(args):
     container_name = pool_ssh_key_container_name(args)
@@ -584,6 +620,12 @@ def download_ssh_keys(args):
     result = subprocess.call(command, stderr=subprocess.STDOUT)
     logger.warning("Public SSH key '{:s}' downloaded from container '{:s}' to '{:s}'.".format(public_blob_name, container_name, public_file_path))
 
+def download_secrets(args):
+    container_name = pool_vm_secrets_container_name(args)
+    blobs = list_blobs(container_name, args)
+    ensure_exists(args.vm_secrets_directory)
+    [download_blob(container_name, os.path.join(args.vm_secrets_directory, blob["name"]), blob["name"], args) for blob in blobs]
+
 def remove_ssh_host(vm, args):
     hostname = vm_url(vm, args)
     command = ['ssh-keygen', '-R', hostname]
@@ -597,6 +639,19 @@ def vm_test_ssh(vm, args):
     command = ["ssh", host_opt, "-i", ssh_key_opt, "-o", strict_host_check_opt, script_opt]
     result = subprocess.call(command, stderr=subprocess.STDOUT)
     return(result == 0)
+
+def initialise_pool_subdirectory(directory_name, args):
+    dir_path = os.path.join(args.pool_directory, directory_name)
+    ensure_exists(dir_path)
+    # Copy utility scripts
+    shutil.copy2("az-queue.py", os.path.join(dir_path, "az-queue.py"))
+    shutil.copy2("az-storage.py", os.path.join(dir_path, "az-storage.py"))
+    # Copy secrets
+    dest_secrets_path = os.path.join(dir_path, args.vm_secrets_directory)
+    # Cannot use copytree if destination folder exists. We probably want to remove the secrets irectory anyway to ensure we don't keep any secrets in the pool directories that don't exist in the master source we are initialising from.
+    if(os.path.exists(dest_secrets_path)):
+        shutil.rmtree(dest_secrets_path)
+    shutil.copytree(args.vm_secrets_directory, dest_secrets_path)
 
 ## ------------------
 ## TOP-LEVEL COMMANDS
@@ -929,6 +984,18 @@ def get_ssh(args):
     # Connect to each VM to validate keys and get host fingerprint acceptance from user
     logger.warning("Testing SSH connection to each VM")
     [vm_test_ssh(vm, args) for vm in vms]
+
+def get_secrets(args):
+    logger.warning("Getting secrets for VM pool.")
+    download_secrets(args)
+
+def initialise_pool_directory(args):
+    logger.warning("Initialising pool directory '{:s}'.".format(args.pool_directory))
+    # Ensure pool directory exists
+    ensure_exists(args.pool_directory)
+    initialise_pool_subdirectory("deploy", args)
+    initialise_pool_subdirectory("setup", args)
+    initialise_pool_subdirectory("task", args)
 
 
 if __name__ == "__main__":
