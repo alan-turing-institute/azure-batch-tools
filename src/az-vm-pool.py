@@ -910,13 +910,14 @@ def shutdown_all(args):
     return(result)
 
 def shutdown_vm(vm, args):
+    vm_name = vm["name"]
     if(vm["powerState"] == "VM deallocated"):
-        logger.warning("VM '{0}' already deallocated.".format(vm["name"]))
+        logger.warning("VM '{0}' already deallocated.".format(vm_name))
         return
     else:
         start_time = datetime.now()
-        logger.warning("{:%Hh%Mm%Ss}: Deallocating VM '{:s}'.".format(datetime.now(), vm["name"]))
-        name_opt = "--name={0}".format(vm["name"])
+        logger.warning("{:%Hh%Mm%Ss}: Deallocating VM '{:s}'.".format(datetime.now(), vm_name))
+        name_opt = "--name={0}".format(vm_name)
         options = [name_opt]
         commands = ["vm", "deallocate"]
         if(args.no_wait):
