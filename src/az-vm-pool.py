@@ -632,13 +632,8 @@ def remove_ssh_host(vm, args):
     result = subprocess.call(command, stderr=subprocess.STDOUT)
 
 def vm_test_ssh(vm, args):
-    ssh_key_opt = "{:s}".format(ssh_private_key_path(args))
-    strict_host_check_opt = "StrictHostKeyChecking=no"
-    host_opt = "{:s}".format(vm_url(vm, args))
-    script_opt = "exit"
-    command = ["ssh", host_opt, "-i", ssh_key_opt, "-o", strict_host_check_opt, script_opt]
-    result = subprocess.call(command, stderr=subprocess.STDOUT)
-    return(result == 0)
+    script = "exit"
+    return vm_run_script(vm, script, args, detach=False)
 
 def initialise_pool_subdirectory(directory_name, args):
     dir_path = os.path.join(args.pool_directory, directory_name)
