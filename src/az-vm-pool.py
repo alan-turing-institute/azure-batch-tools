@@ -34,7 +34,7 @@ AZURE_PASSWORD_CHARSET = string.ascii_lowercase + string.ascii_uppercase + strin
 # Some defaults
 DEFAULT_SSH_KEY_DIRECTORY = 'private-pool-ssh-keys'
 DEFAULT_VM_SECRETS_DIRECTORY = 'secrets'
-DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:16.04.201703300'
+DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:latest'
 DEFAULT_OS_CONTAINER_NAME = "vhds"
 DEFAULT_DATA_CONTAINER_NAME = "data"
 DEFAULT_SSH_KEY_CONTAINER_NAME = "sshkeys"
@@ -84,6 +84,8 @@ def main():
         help="Directory containing 'setup', 'deploy' and 'task' directories for the pool.")
     parser.add_argument("--no-wait", action='store_true',
         help="Do not wait for each VM creation or setup to complete before starting creation or setup of next VM. WARNING: If set, you must check yourself that all creation or setup of all VMs in pool is complete before starting next step of deployment.)")
+    parser.add_argument("--vm-image", choices=['canonical:UbuntuServer:16.04-LTS:latest', 'OpenLogic:CentOS:7.3:latest'],
+        default=DEFAULT_VM_IMAGE, help="SKU of VM image to use.")
 
     args = parser.parse_args()
     # Enforce conditional required arguments
@@ -105,7 +107,6 @@ def main():
     # Add some default arguments that we won't clutter up the command line with
     args.ssh_key_directory = DEFAULT_SSH_KEY_DIRECTORY
     args.vm_secrets_directory = DEFAULT_VM_SECRETS_DIRECTORY
-    args.vm_image = DEFAULT_VM_IMAGE
     args.os_container_name = DEFAULT_OS_CONTAINER_NAME
     args.data_container_name = DEFAULT_DATA_CONTAINER_NAME
     args.ssh_key_container_name = DEFAULT_SSH_KEY_CONTAINER_NAME
@@ -664,7 +665,7 @@ def create_pool(args):
         logger.warning("VM pool already exists containing the above VMs. Use 'delete-pool' command to remove this pool before creating a new pool.")
     else:
         start_time = datetime.now()
-        logger.warning("{:%Hh%Mm%Ss}: Creating pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group))
+        logger.warning("{:%Hh%Mm%Ss}: Creating pool of {:d} VMs for Resource Group '{:s}' using image '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group, args.vm_image))
         logger.warning("{:%Hh%Mm%Ss}: Creating SSH keys for VM pool {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group))
         gen_ssh_keys(args)
         upload_ssh_keys(args)
