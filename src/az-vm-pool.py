@@ -875,13 +875,14 @@ def start_all(args):
     return(result)
 
 def start_vm(vm, args):
+    vm_name = vm["name"]
     if(vm["powerState"] == "VM running"):
         logger.warning("VM '{0}' already running.".format(vm["name"]))
         return
     else:
         start_time = datetime.now()
-        logger.warning("{:%Hh%Mm%Ss}: Starting VM '{:s}'.".format(datetime.now(), vm["name"]))
-        name_opt = "--name={0}".format(vm["name"])
+        logger.warning("{:%Hh%Mm%Ss}: Starting VM '{:s}'.".format(datetime.now(), vm_name))
+        name_opt = "--name={0}".format(vm_name)
         options = [name_opt]
         commands = ["vm", "start"]
         if(args.no_wait):
