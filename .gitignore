@@ -90,6 +90,7 @@ ENV/
 
 # Private folders for local SSH keys
 private-pool-ssh-keys/
+private-batch-ssh-keys
 
 # Private folders for local Azure SAS tokens
 secrets/
