@@ -95,6 +95,10 @@ def main():
         help="Do not wait for each VM creation or setup to complete before starting creation or setup of next VM. WARNING: If set, you must check yourself that all creation or setup of all VMs in pool is complete before starting next step of deployment.)")
     parser.add_argument("--vm-image", choices=['canonical:UbuntuServer:16.04-LTS:latest', 'OpenLogic:CentOS:7.3:latest'],
         default=DEFAULT_VM_IMAGE, help="SKU of VM image to use.")
+    parser.add_argument("--force", '-f', action='store_true',
+        help="Force creation of resource group is it does not exist. Also requires location option to be set to required Azure region.")
+    parser.add_argument("--location", "-l",
+        help="Used alongside --force option to create resource group if it does not already exist. Set to required Azure region (e.g. westeurope)")
 
     args = parser.parse_args()
     # Enforce conditional required arguments
@@ -219,6 +223,23 @@ def get_default_subscription():
 ## ----------------
 def print_json(json_obj):
     print(json.dumps(json_obj, sort_keys=True, indent=2, separators=(',',':')))
+
+def resource_group_exists(args):
+    name_opt = "--name={0}".format(args.resource_group)
+    commands = ["group", "show"]
+    options = [name_opt]
+    command_list = commands + options
+    result = APPLICATION.execute(command_list).result
+    return(result is not None)
+
+def create_resource_group(args):
+    name_opt = "--name={0}".format(args.resource_group)
+    location_opt = "--location={0}".format(args.location)
+    commands = ["group", "create"]
+    options = [name_opt, location_opt]
+    command_list = commands + options
+    result = APPLICATION.execute(command_list).result
+    return(result)
 
 def print_vm_list(vm_list_json, args):
     print("VMs in Resource Group '{0}':".format(args.resource_group))
@@ -691,6 +712,15 @@ def list_sizes(args):
     print_vm_size_table(result, args)
 
 def create_pool(args):
+    # Check if resource group exists before progressing further
+    if not resource_group_exists(args):
+        if(args.force and args.location is not None):
+            logger.warning("Creating resource group {:s}.")
+            create_resource_group(args)
+        else:
+            logger.warning("Resource group {:s} does not exist. Use --force option with --location=<azure_region> to automatically create it.")
+            sys.exit()
+    # Check for existing VMs pool for resource group
     vms = get_vms(args)
     num_existing_vms = len(vms)
     if(num_existing_vms > 0):
