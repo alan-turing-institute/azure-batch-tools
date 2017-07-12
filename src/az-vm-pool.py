@@ -343,6 +343,17 @@ def get_resource_group_location(args):
     resource_group = APPLICATION.execute(["group", "show", resource_group_opt]).result
     return(resource_group["location"])
 
+def create_virtual_network(args):
+    vnet_name = args.resource_group
+    subnet_name = vnet_name
+    name_opt = "--name={0}".format(vnet_name)
+    location_opt = "--location={0}".format(get_resource_group_location(args))
+    subnet_opt = "--subnet-name={0}".format(subnet_name)
+    commands = ["network", "vnet", "create"]
+    options = [name_opt, location_opt, subnet_opt]
+    result = vm_pool_command(commands, options, args)
+    return(result)
+
 def create_storage_account(args):
     storage_account_name = args.resource_group
     name_opt = "--name={0}".format(storage_account_name)
@@ -695,6 +706,8 @@ def create_pool(args):
         upload_ssh_keys(args)
         logger.warning("{:%Hh%Mm%Ss}: Creating pool data container '{:s}' if it doesn't already exist.".format(datetime.now(), pool_data_container_name(args)))
         create_pool_data_container(args)
+        logger.warning("{:%Hh%Mm%Ss}: Ensuring virtual network exists for pool '{:s}'.".format(datetime.now(), args.resource_group))
+        create_virtual_network(args)
         result = [create_vm(i, args) for i in range(0, args.num_vms)]
         # Refresh VMs
         vms = get_vms(args)
