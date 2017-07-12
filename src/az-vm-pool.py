@@ -42,6 +42,8 @@ DEFAULT_VM_SECRETS_CONTAINER_NAME = "vmsecrets"
 DEFAULT_CONTAINER_SAS_PREFIX = "sas_storage_container"
 DEFAULT_SAS_EXPIRY_DAYS = 14
 DEFAULT_POOL_FILE_PREFIX = "azure_vm_pool"
+DEFAULT_STORAGE_REDUNDANCY = "Standard_LRS"
+DEFAULT_STORAGE_ACCOUNT_TYPE = "Storage"
 SETUP_DIRECTORY = "setup"
 DEPLOY_DIRECTORY = "deploy"
 TASK_DIRECTORY = "task"
@@ -62,6 +64,7 @@ else:
     get_input = input
 
 def main():
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description=__name__)
     parser.add_argument('resource_group',
@@ -126,6 +129,8 @@ def main():
     args.deploy_script = DEPLOY_SCRIPT
     args.task_script = TASK_SCRIPT
     args.vm_user = DEFAULT_VM_USER
+    args.storage_redundancy = DEFAULT_STORAGE_REDUNDANCY
+    args.storage_account_type = DEFAULT_STORAGE_ACCOUNT_TYPE
 
     azlogging.configure_logging("")
 
@@ -337,6 +342,17 @@ def get_resource_group_location(args):
     resource_group_opt = "--name={0}".format(args.resource_group)
     resource_group = APPLICATION.execute(["group", "show", resource_group_opt]).result
     return(resource_group["location"])
+
+def create_storage_account(args):
+    storage_account_name = args.resource_group
+    name_opt = "--name={0}".format(storage_account_name)
+    location_opt = "--location={0}".format(get_resource_group_location(args))
+    redundancy_opt = "--sku={0}".format(args.storage_redundancy)
+    account_type_opt = "--kind={0}".format(args.storage_account_type)
+    commands = ["storage", "account", "create"]
+    options = [name_opt, location_opt, account_type_opt, redundancy_opt]
+    result = vm_pool_command(commands, options, args)
+    return(result)
 
 def public_ip_exists(ip_name, args):
     name_opt = "--name={0}".format(ip_name)
@@ -672,6 +688,8 @@ def create_pool(args):
     else:
         start_time = datetime.now()
         logger.warning("{:%Hh%Mm%Ss}: Creating pool of {:d} VMs for Resource Group '{:s}' using image '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group, args.vm_image))
+        logger.warning("{:%Hh%Mm%Ss}: Ensuring storage account exists for Resource Group '{:s}'.".format(datetime.now(), args.resource_group))
+        create_storage_account(args)
         logger.warning("{:%Hh%Mm%Ss}: Creating SSH keys for VM pool {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), args.num_vms, args.resource_group))
         gen_ssh_keys(args)
         upload_ssh_keys(args)
