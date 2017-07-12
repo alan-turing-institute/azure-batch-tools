@@ -55,6 +55,12 @@ CLEAN_EXIT = 0
 USER_EXIT = 1
 ERROR_EXIT = 2
 
+
+if sys.version_info[0] < 3:
+    get_input = raw_input
+else:
+    get_input = input
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description=__name__)
@@ -931,7 +937,7 @@ def delete_pool(args):
     if(num_vms == 0):
         logger.warning("No VMs in pool.")
         return
-    resp = raw_input("Are you sure you want to delete all {0} of the above VMs? (y/n):".format(num_vms))
+    resp = get_input("Are you sure you want to delete all {0} of the above VMs? (y/n):".format(num_vms))
     if(resp == "y"):
         start_time = datetime.now()
         logger.warning("{:%Hh%Mm%Ss}: Deleting pool of {:d} VMs for Resource Group '{:s}'.".format(datetime.now(), num_vms, args.resource_group))
