@@ -721,10 +721,10 @@ def create_pool(args):
     # Check if resource group exists before progressing further
     if not resource_group_exists(args):
         if(args.force and args.location is not None):
-            logger.warning("Creating resource group {:s}.")
+            logger.warning("Creating resource group '{:s}'.".format(args.resource_group))
             create_resource_group(args)
         else:
-            logger.warning("Resource group {:s} does not exist. Use --force option with --location=<azure_region> to automatically create it.")
+            logger.warning("Resource group '{:s}' does not exist. Use --force option with --location=<azure_region> to automatically create it.".format(args.resource_group))
             sys.exit()
     # Check for existing VMs pool for resource group
     vms = get_vms(args)
