@@ -93,8 +93,8 @@ def main():
         help="Directory containing 'setup', 'deploy' and 'task' directories for the pool.")
     parser.add_argument("--no-wait", action='store_true',
         help="Do not wait for each VM creation or setup to complete before starting creation or setup of next VM. WARNING: If set, you must check yourself that all creation or setup of all VMs in pool is complete before starting next step of deployment.)")
-    parser.add_argument("--vm-image", choices=['canonical:UbuntuServer:16.04-LTS:latest', 'OpenLogic:CentOS:7.3:latest'],
-        default=DEFAULT_VM_IMAGE, help="SKU of VM image to use.")
+    parser.add_argument("--vm-image",
+        default=DEFAULT_VM_IMAGE, help="SKU of VM image to use. For example 'canonical:UbuntuServer:16.04-LTS:latest', 'OpenLogic:CentOS:7.3:latest', 'microsoft-ads:linux-data-science-vm-ubuntu:linuxdsvmubuntu:latest'")
     parser.add_argument("--force", '-f', action='store_true',
         help="Force creation of resource group is it does not exist. Also requires location option to be set to required Azure region.")
     parser.add_argument("--location", "-l",
