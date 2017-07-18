@@ -34,7 +34,7 @@ AZURE_PASSWORD_CHARSET = string.ascii_lowercase + string.ascii_uppercase + strin
 # Some defaults
 DEFAULT_SSH_KEY_DIRECTORY = 'private-pool-ssh-keys'
 DEFAULT_VM_SECRETS_DIRECTORY = 'secrets'
-DEFAULT_VM_IMAGE = 'canonical:UbuntuServer:16.04-LTS:latest'
+DEFAULT_VM_IMAGE = 'microsoft-ads:linux-data-science-vm-ubuntu:linuxdsvmubuntu:latest'
 DEFAULT_OS_CONTAINER_NAME = "vhds"
 DEFAULT_DATA_CONTAINER_NAME = "data"
 DEFAULT_SSH_KEY_CONTAINER_NAME = "sshkeys"
@@ -99,6 +99,8 @@ def main():
         help="Force creation of resource group is it does not exist. Also requires location option to be set to required Azure region.")
     parser.add_argument("--location", "-l",
         help="Used alongside --force option to create resource group if it does not already exist. Set to required Azure region (e.g. westeurope)")
+    parser.add_argument("--use-managed-disks", action='store_true',
+        help="Use managed disks. These are required for the data science VM and are created and managed by Azure outside of the pool storage account. These managed disks are not deleted by the 'delete-pool' command, as we don't name them and we rely on known naming to delete resources.")
 
     args = parser.parse_args()
     # Enforce conditional required arguments
@@ -790,13 +792,21 @@ def create_vm(vm_number, args):
     size_opt = "--size={0}".format(args.vm_size)
     nics_opt = "--nics={0}".format(nic_name)
     user_opt = "--admin-username={0}".format(args.vm_user)
-    unmanaged_opt = "--use-unmanaged-disk"
-    storage_account_opt = "--storage-account={0}".format(storage_account_name)
-    storage_container_opt = "--storage-container-name={0}".format(os_container_name)
     os_disk_name_opt = "--os-disk-name={0}".format(os_disk_name)
-    # Construct commands and options
+# Construct commands and options
     commands = ["vm", "create"]
-    options = [name_opt, ssh_opt, image_opt, location_opt, size_opt, nics_opt, unmanaged_opt, storage_account_opt, storage_container_opt, os_disk_name_opt, user_opt]
+    options = [name_opt, ssh_opt, image_opt, location_opt, size_opt, nics_opt, user_opt, os_disk_name_opt]
+    if not args.use_managed_disks:
+        # For managed disks we specify the storage container
+        unmanaged_opt = "--use-unmanaged-disk"
+        storage_account_opt = "--storage-account={0}".format(storage_account_name)
+        storage_container_opt = "--storage-container-name={0}".format(os_container_name)
+        options = options + [unmanaged_opt, storage_account_opt, storage_container_opt]
+    else:
+        # Set storage redundancy type for managed storage
+        managed_storage_redundancy_opt = "--storage-sku={}".format('Standard_LRS')
+        data_disk_sizes_opt = "--data-disk-sizes-gb={}".format(1023)
+        options = options + [managed_storage_redundancy_opt]
     if(args.no_wait):
         options.append("--no-wait")
     # Create VM
