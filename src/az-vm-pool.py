@@ -707,7 +707,13 @@ def initialise_pool_subdirectory(directory_name, args):
 ## TOP-LEVEL COMMANDS
 ## ------------------
 def list_sizes(args):
-    location_opt = "--location={0}".format(get_resource_group_location(args))
+    if args.location is not None:
+        # If location explicitly provided, use this
+        location = args.location
+    else:
+        # Use location from resource group (if group exists)
+        location = get_resource_group_location(args)
+    location_opt = "--location={0}".format(location)
     result = APPLICATION.execute(["vm", "list-sizes", location_opt]).result
     print_vm_size_table(result, args)
 
